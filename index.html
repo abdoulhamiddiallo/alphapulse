@@ -1,0 +1,1764 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AlphaPulse — Intelligence du flux d'actualités</title>
+<meta name="description" content="Analyse du sentiment médiatique des valeurs du S&P 500 : score PULSE, divergence sentiment/prix, clustering des narratifs et test de permutation.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.32.0/plotly.min.js"></script>
+<style>
+:root{
+  --bg:#0B0F19; --bg2:#0E1420; --panel:#141A28; --panel2:#1A2233; --border:#243046;
+  --grid:#243046; --text:#E6EAF3; --soft:#B6C0D3; --muted:#8B97AE;
+  --accent:#4CC9F0; --accentFg:#06202B; --accent2:#B892FF;
+  --bull:#2ECC8F; --bullMid:#28A87A; --bear:#FF5C7A; --bearMid:#B04A63;
+  --neutral:#8B97AE; --warn:#FFB454; --scaleMid:#2A3448;
+  --bullWash:rgba(46,204,143,.16); --bearWash:rgba(255,92,122,.16);
+  --warnWash:rgba(255,180,84,.16); --neutralWash:rgba(139,151,174,.16);
+  --accentWash:rgba(76,201,240,.20); --hover:rgba(255,255,255,.06);
+  --shadow:0 1px 2px rgba(0,0,0,.4);
+  --logoGrad:linear-gradient(92deg,#4CC9F0,#B892FF 60%,#2ECC8F);
+  color-scheme:dark;
+}
+html[data-theme="light"]{
+  --bg:#F5F7FB; --bg2:#FFFFFF; --panel:#FFFFFF; --panel2:#EEF2F8; --border:#D5DEEA;
+  --grid:#E2E8F1; --text:#111827; --soft:#31415A; --muted:#55637A;
+  --accent:#0B6E9E; --accentFg:#FFFFFF; --accent2:#5B34AC;
+  --bull:#0A7A52; --bullMid:#2F9873; --bear:#C01B41; --bearMid:#CE3F5F;
+  --neutral:#6B788C; --warn:#8F5400; --scaleMid:#C3CCDA;
+  --bullWash:rgba(10,122,82,.12); --bearWash:rgba(192,27,65,.10);
+  --warnWash:rgba(143,84,0,.12); --neutralWash:rgba(107,120,140,.14);
+  --accentWash:rgba(11,110,158,.14); --hover:rgba(17,24,39,.05);
+  --shadow:0 1px 3px rgba(17,24,39,.08);
+  --logoGrad:linear-gradient(92deg,#0B6E9E,#5B34AC 60%,#0A7A52);
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;transition:background .2s,color .2s}
+img{max-width:100%}
+a{color:var(--accent)}
+.wrap{max-width:1380px;margin:0 auto;padding:0 18px 72px}
+
+/* ---------- topbar ---------- */
+header.top{position:sticky;top:0;z-index:50;background:var(--bg);
+  border-bottom:1px solid var(--border);padding:14px 0 0}
+.brandrow{max-width:1380px;margin:0 auto;padding:0 18px;display:flex;
+  align-items:center;gap:14px;flex-wrap:wrap}
+.logo{font-size:1.5rem;font-weight:800;letter-spacing:-.02em;background:var(--logoGrad);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.tagline{color:var(--muted);font-size:.84rem;flex:1;min-width:180px}
+.tbtns{display:flex;gap:8px;align-items:center}
+button.ghost{background:var(--panel);color:var(--text);border:1px solid var(--border);
+  border-radius:9px;padding:.45rem .7rem;font-size:.8rem;font-weight:600;cursor:pointer;
+  font-family:inherit;transition:.15s}
+button.ghost:hover{border-color:var(--accent);color:var(--accent)}
+nav.tabs{max-width:1380px;margin:0 auto;padding:12px 18px 0;display:flex;gap:4px;
+  max-width:100%;
+  overflow-x:auto;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs button{background:none;border:none;border-bottom:2px solid transparent;
+  color:var(--muted);font:600 .9rem inherit;font-family:inherit;padding:.55rem .8rem;
+  cursor:pointer;white-space:nowrap;transition:.15s}
+nav.tabs button:hover{color:var(--text)}
+nav.tabs button[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent)}
+
+/* ---------- generic ---------- */
+h2.sec{font-size:1.18rem;margin:30px 0 4px;font-weight:700;letter-spacing:-.01em}
+h3.sub{font-size:.95rem;margin:22px 0 8px;font-weight:700}
+p.note{color:var(--muted);font-size:.84rem;margin:.2rem 0 14px;max-width:82ch}
+.rule{height:1px;background:linear-gradient(90deg,var(--accent),transparent);
+  margin:8px 0 18px;border:0}
+.grid{display:grid;gap:14px}
+.pill{display:inline-block;padding:.16rem .6rem;border-radius:999px;font-size:.73rem;
+  font-weight:700;letter-spacing:.02em;margin:.1rem .12rem;white-space:nowrap}
+.pill.bull{background:var(--bullWash);color:var(--bull);border:1px solid var(--bull)}
+.pill.bear{background:var(--bearWash);color:var(--bear);border:1px solid var(--bear)}
+.pill.warn{background:var(--warnWash);color:var(--warn);border:1px solid var(--warn)}
+.pill.neutral{background:var(--neutralWash);color:var(--soft);border:1px solid var(--border)}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;
+  padding:.8rem .95rem;box-shadow:var(--shadow)}
+.card .k{color:var(--muted);font-size:.68rem;text-transform:uppercase;
+  letter-spacing:.09em;margin-bottom:.3rem;font-weight:700}
+.card .v{font-size:1.42rem;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.card .s{color:var(--muted);font-size:.73rem;margin-top:.22rem}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.cards>*{min-width:0}
+.warnnote{border-left:3px solid var(--warn);background:var(--warnWash);
+  color:var(--text);font-size:.83rem;padding:.5rem .75rem;border-radius:8px;
+  margin-top:.6rem}
+.quote{border-left:3px solid var(--accent);padding:.55rem 0 .55rem .9rem;font-size:1rem}
+.verdict{border:1px solid var(--border);background:var(--panel);border-radius:13px;
+  padding:.85rem 1rem;box-shadow:var(--shadow)}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;
+  padding:10px;box-shadow:var(--shadow);min-width:0}
+.chart{width:100%;min-width:0;min-height:120px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.sidebyside{display:grid;grid-template-columns:minmax(240px,1fr) minmax(0,2.1fr);gap:16px}
+@media(max-width:900px){.two,.sidebyside{grid-template-columns:minmax(0,1fr)}}
+
+/* ---------- controls ---------- */
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:6px 0 4px;
+  max-width:100%}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0;max-width:100%}
+.field label{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--muted);font-weight:700}
+input[type=text],input[type=search],input[type=password],select{
+  background:var(--panel);color:var(--text);border:1px solid var(--border);
+  border-radius:9px;padding:.5rem .65rem;font:inherit;font-size:.9rem;min-width:150px;
+  max-width:100%;width:100%}
+input:focus,select:focus{outline:2px solid var(--accentWash);border-color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accentFg);border:1px solid var(--accent);
+  border-radius:9px;padding:.52rem .95rem;font:700 .88rem inherit;font-family:inherit;
+  cursor:pointer;transition:.15s}
+button.primary:hover{filter:brightness(1.08)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.chip{background:var(--panel);border:1px solid var(--border);border-radius:999px;
+  padding:.3rem .7rem;font-size:.8rem;font-weight:600;cursor:pointer;color:var(--soft);
+  transition:.15s;font-family:inherit}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.chip[aria-pressed="true"]{background:var(--accentWash);color:var(--text);
+  border-color:var(--accent)}
+
+/* ---------- tables ---------- */
+.tw{overflow:auto;border:1px solid var(--border);border-radius:13px;background:var(--panel);
+  box-shadow:var(--shadow)}
+table.t{width:100%;border-collapse:separate;border-spacing:0;font-size:.85rem}
+table.t thead th{position:sticky;top:0;z-index:2;background:var(--panel2);color:var(--muted);
+  font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;
+  text-align:left;white-space:nowrap;padding:.58rem .7rem;border-bottom:1px solid var(--border)}
+table.t td{padding:.5rem .7rem;border-bottom:1px solid var(--border);white-space:nowrap}
+table.t tbody tr:last-child td{border-bottom:none}
+table.t tbody tr:hover td{background:var(--hover)}
+table.t td.num,table.t th.num{text-align:right;font-variant-numeric:tabular-nums}
+table.t td.wrap{white-space:normal;min-width:230px;color:var(--soft);font-size:.81rem}
+table.t td.strong{font-weight:700}
+.barwrap{display:flex;align-items:center;gap:9px;min-width:120px}
+.bar{position:relative;flex:1;height:16px;min-width:64px;border-radius:5px;
+  background:var(--panel2);overflow:hidden;border:1px solid var(--border)}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;display:block}
+.barwrap b{font-size:.79rem;font-weight:700;font-variant-numeric:tabular-nums;
+  min-width:24px;text-align:right;color:var(--text)}
+.empty{color:var(--muted);font-size:.86rem;padding:1rem;border:1px dashed var(--border);
+  border-radius:13px}
+
+/* ---------- articles ---------- */
+.art{border-left:3px solid var(--border);padding:.5rem 0 .5rem .85rem;margin-bottom:.7rem}
+.art a{color:var(--text);text-decoration:none;font-weight:650;font-size:.93rem;
+  display:inline-block}
+.art a:hover{color:var(--accent)}
+.art .meta{color:var(--muted);font-size:.73rem;margin-top:.22rem}
+.art .body{color:var(--soft);font-size:.82rem;margin-top:.3rem;line-height:1.45}
+details.clu{border:1px solid var(--border);border-radius:12px;background:var(--panel);
+  padding:.6rem .85rem;margin-bottom:9px}
+details.clu summary{cursor:pointer;font-weight:650;font-size:.9rem}
+details.clu[open] summary{margin-bottom:.6rem}
+footer.foot{color:var(--muted);font-size:.78rem;border-top:1px solid var(--border);
+  margin-top:38px;padding-top:16px;max-width:88ch}
+.hide{display:none!important}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid var(--border);
+  border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;
+  vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brandrow">
+    <span class="logo">AlphaPulse</span>
+    <span class="tagline">Intelligence du flux d'actualités — S&amp;P 500</span>
+    <span class="tbtns">
+      <button class="ghost" id="btnTheme" title="Basculer clair / sombre">🌙 Sombre</button>
+      <button class="ghost" id="btnLive" title="Connecter une clé Alpha Vantage gratuite">Données en direct</button>
+    </span>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="intel" aria-selected="true">Valeur</button>
+    <button role="tab" data-tab="narr" aria-selected="false">Narratifs</button>
+    <button role="tab" data-tab="screen" aria-selected="false">Screener</button>
+    <button role="tab" data-tab="valid" aria-selected="false">Validation</button>
+    <button role="tab" data-tab="method" aria-selected="false">Méthode</button>
+  </nav>
+</header>
+
+<div class="wrap">
+
+  <!-- live key drawer -->
+  <div class="panel hide" id="liveBox" style="margin-top:16px">
+    <div class="controls">
+      <div class="field" style="flex:1;min-width:240px">
+        <label for="avKey">Clé Alpha Vantage (gratuite, reste dans votre navigateur)</label>
+        <input type="password" id="avKey" placeholder="ex. XXXXXXXXXXXXXXXX" autocomplete="off">
+      </div>
+      <button class="primary" id="btnConnect">Connecter</button>
+      <button class="ghost" id="btnDisconnect">Revenir à l'instantané</button>
+    </div>
+    <p class="note" style="margin-bottom:2px">
+      Sans clé, la page tourne sur un instantané réel de 50 articles Alpha Vantage
+      (3&nbsp;–&nbsp;6 juillet 2024). Avec une clé, les 503 valeurs sont analysées en direct.
+      Une clé gratuite s'obtient en une minute sur
+      <a href="https://www.alphavantage.co/support/#api-key" target="_blank" rel="noopener">alphavantage.co</a>
+      — elle n'est stockée que sur votre appareil.
+    </p>
+    <div id="liveMsg" class="note"></div>
+  </div>
+
+  <!-- ============================== VALEUR ============================== -->
+  <section data-panel="intel">
+    <div class="controls" style="margin-top:18px">
+      <div class="field">
+        <label for="tkSel">Valeur</label>
+        <select id="tkSel"></select>
+      </div>
+      <div class="field">
+        <label for="minRel">Pertinence minimale</label>
+        <select id="minRel">
+          <option value="0">Aucun filtre</option>
+          <option value="0.15">0,15 — écarte le bruit</option>
+          <option value="0.35">0,35 — sujets dédiés</option>
+          <option value="0.6">0,60 — pure play</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="lookback">Horizon prix</label>
+        <select id="lookback">
+          <option value="3">3 séances</option>
+          <option value="5" selected>5 séances</option>
+          <option value="10">10 séances</option>
+        </select>
+      </div>
+    </div>
+    <div id="intelHead"></div>
+    <div id="intelCards" class="cards" style="margin:14px 0 6px"></div>
+    <div id="intelProv" style="margin-bottom:6px"></div>
+
+    <hr class="rule">
+    <div class="sidebyside">
+      <div class="panel">
+        <div id="chGauge" class="chart"></div>
+        <div class="cards" style="grid-template-columns:1fr 1fr;padding:0 6px 6px">
+          <div><div class="k" style="color:var(--muted);font-size:.68rem;font-weight:700;
+            text-transform:uppercase;letter-spacing:.09em">Direction</div>
+            <div class="v" id="vDir" style="font-size:1.25rem;font-weight:700"></div></div>
+          <div><div class="k" style="color:var(--muted);font-size:.68rem;font-weight:700;
+            text-transform:uppercase;letter-spacing:.09em">Confiance</div>
+            <div class="v" id="vConf" style="font-size:1.25rem;font-weight:700"></div></div>
+        </div>
+      </div>
+      <div class="panel"><div id="chOverlay" class="chart"></div></div>
+    </div>
+    <p class="note">Cours et sentiment quotidien pondéré sur le même axe temporel.
+      Une couleur soutenue sous un cours plat, c'est exactement d'où vient le signal de divergence.</p>
+
+    <div class="two">
+      <div>
+        <h3 class="sub">Sentiment quotidien</h3>
+        <div class="panel"><div id="chDaily" class="chart"></div></div>
+      </div>
+      <div>
+        <h3 class="sub">Pertinence contre sentiment</h3>
+        <div class="panel"><div id="chScatter" class="chart"></div></div>
+        <p class="note">Les grosses bulles hautes sont les articles réellement consacrés à
+          l'entreprise. Tout ce qui traîne en bas est du remplissage d'indice.</p>
+      </div>
+    </div>
+
+    <div class="two">
+      <div>
+        <h3 class="sub">Qui écrit, et avec quel ton ?</h3>
+        <div class="panel"><div id="chSources" class="chart"></div></div>
+      </div>
+      <div>
+        <h3 class="sub">Pourquoi le score dit ce qu'il dit</h3>
+        <div class="panel"><div id="chRadar" class="chart"></div></div>
+      </div>
+    </div>
+    <div id="tblAudit" style="margin-top:12px"></div>
+
+    <h2 class="sec">Note d'analyste</h2>
+    <p class="note">Synthèse déterministe calculée à partir des métriques et des titres
+      ci-dessus. Chaque affirmation renvoie à l'article qui la porte.</p>
+    <div id="note"></div>
+
+    <h2 class="sec">Articles</h2>
+    <div class="controls">
+      <div class="field">
+        <label for="artSort">Trier par</label>
+        <select id="artSort">
+          <option value="rel">Pertinence</option>
+          <option value="sent">Sentiment</option>
+          <option value="date">Date</option>
+        </select>
+      </div>
+    </div>
+    <div id="artList"></div>
+  </section>
+
+  <!-- ============================== NARRATIFS ============================== -->
+  <section data-panel="narr" class="hide">
+    <h2 class="sec">Quelle histoire raconte la couverture ?</h2>
+    <p class="note">Les titres sont regroupés par similarité cosinus TF-IDF, puis chaque
+      groupe est noté séparément. Une moyenne unique donne la température ; ceci donne la météo.</p>
+    <div class="two">
+      <div class="panel"><div id="chNarr" class="chart"></div></div>
+      <div>
+        <div class="panel"><div id="chTerms" class="chart"></div></div>
+        <p class="note">Écart de sentiment = à quel point les articles contenant ce mot sont
+          plus (ou moins) haussiers que la moyenne de la valeur.</p>
+      </div>
+    </div>
+    <h3 class="sub">Détail des groupes</h3>
+    <div id="narrList"></div>
+  </section>
+
+  <!-- ============================== SCREENER ============================== -->
+  <section data-panel="screen" class="hide">
+    <h2 class="sec">Classer l'indice par flux d'actualités</h2>
+    <p class="note">Toutes les valeurs réellement citées dans la fenêtre, notées avec le même
+      moteur. Le nombre d'articles est le premier filtre : trois mentions ne valent pas
+      dix-huit.</p>
+    <div class="controls">
+      <div class="field">
+        <label for="scrMin">Articles minimum</label>
+        <select id="scrMin">
+          <option value="1">1</option>
+          <option value="3" selected>3</option>
+          <option value="5">5</option>
+        </select>
+      </div>
+    </div>
+    <div id="scrCards" class="cards" style="margin:12px 0"></div>
+    <div class="chips" id="scrTabs">
+      <button class="chip" data-sv="rank" aria-pressed="true">Classement</button>
+      <button class="chip" data-sv="map" aria-pressed="false">Carte sectorielle</button>
+      <button class="chip" data-sv="div" aria-pressed="false">Divergence</button>
+      <button class="chip" data-sv="tbl" aria-pressed="false">Tableau</button>
+    </div>
+    <div id="svRank"><div class="panel"><div id="chRank" class="chart"></div></div></div>
+    <div id="svMap" class="hide">
+      <div class="panel"><div id="chTree" class="chart"></div></div>
+      <p class="note">Surface = volume d'articles ; couleur = sentiment pondéré.</p>
+    </div>
+    <div id="svDiv" class="hide">
+      <div class="panel"><div id="chDiv" class="chart"></div></div>
+      <p class="note">Divergence positive = la presse lit mieux que la cotation.
+        C'est une hypothèse à instruire, pas un signal : le marché a souvent raison.</p>
+    </div>
+    <div id="svTbl" class="hide"></div>
+  </section>
+
+  <!-- ============================== VALIDATION ============================== -->
+  <section data-panel="valid" class="hide">
+    <h2 class="sec">Tester le signal avant d'y croire</h2>
+    <p class="note">Le sentiment pondéré de chaque jour est apparié au rendement réalisé
+      <strong>après</strong> lui — entrée à la clôture de la séance suivante, sortie N séances
+      plus tard. Le test de permutation rebat ensuite les étiquettes des milliers de fois pour
+      voir à quelle fréquence le pur hasard fait aussi bien.</p>
+    <div class="controls">
+      <div class="field">
+        <label for="vTk">Valeur</label>
+        <select id="vTk"></select>
+      </div>
+      <div class="field">
+        <label for="vPerm">Permutations</label>
+        <select id="vPerm">
+          <option value="500">500</option>
+          <option value="2000" selected>2 000</option>
+          <option value="5000">5 000</option>
+        </select>
+      </div>
+      <button class="primary" id="btnValid">Lancer le test</button>
+    </div>
+    <div id="vVerdict" style="margin:14px 0"></div>
+    <div class="two">
+      <div class="panel"><div id="chIC" class="chart"></div></div>
+      <div id="tblIC"></div>
+    </div>
+    <h3 class="sub">Distribution nulle</h3>
+    <div class="controls">
+      <div class="field">
+        <label for="vHor">Horizon inspecté</label>
+        <select id="vHor"></select>
+      </div>
+    </div>
+    <div class="panel"><div id="chNull" class="chart"></div></div>
+    <p class="note" id="nullNote"></p>
+    <h3 class="sub">Quel signal est le moins inutile ?</h3>
+    <p class="note">Le même test appliqué à quatre signaux bâtis sur le même flux. Si la
+      pondération par la pertinence mérite sa place, elle le montre ici. Classer quatre
+      signaux sur le même échantillon puis annoncer le gagnant gonfle la significativité :
+      à lire comme « lequel mérite d'être étudié », jamais comme un résultat.</p>
+    <div id="tblVar"></div>
+  </section>
+
+  <!-- ============================== MÉTHODE ============================== -->
+  <section data-panel="method" class="hide">
+    <h2 class="sec">Le score PULSE</h2>
+    <p class="note">La plupart des tableaux de bord de sentiment font la moyenne d'une colonne
+      et appellent ça un signal. Un article « 3 valeurs à acheter en juillet » pèse alors autant
+      qu'une pré-annonce de résultats. PULSE répond à deux questions séparément.</p>
+    <div class="two">
+      <div class="panel" style="padding:14px 18px">
+        <h3 class="sub" style="margin-top:4px">Direction — de quel côté penche le flux</h3>
+        <ul style="color:var(--soft);font-size:.88rem;line-height:1.7">
+          <li><strong>Niveau de sentiment (55 %)</strong> — moyenne pondérée par la pertinence.
+            Sans cette pondération, le remplissage l'emporte.</li>
+          <li><strong>Momentum (25 %)</strong> — moitié récente moins moitié ancienne.
+            La variation informe davantage que le niveau, largement dû au mix de sources.</li>
+          <li><strong>Écart au prix (20 %)</strong> — le penchant de la presse moins le
+            mouvement de cours z-scoré.</li>
+        </ul>
+      </div>
+      <div class="panel" style="padding:14px 18px">
+        <h3 class="sub" style="margin-top:4px">Confiance — faut-il y croire</h3>
+        <ul style="color:var(--soft);font-size:.88rem;line-height:1.7">
+          <li><strong>Volume de couverture (35 %)</strong> — saturation logarithmique à 30 articles.</li>
+          <li><strong>Qualité de pertinence (30 %)</strong> — la couverture parle-t-elle
+            de l'entreprise, ou de l'indice ?</li>
+          <li><strong>Consensus (25 %)</strong> — dispersion du sentiment entre médias.</li>
+          <li><strong>Sursaut d'attention (10 %)</strong> — volume récent contre la base de la fenêtre.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:14px;padding:16px 18px;text-align:center">
+      <code style="font-size:1rem;color:var(--text)">PULSE = 50 + (DIRECTION − 50) × (0,4 + 0,6 × CONFIANCE / 100)</code>
+    </div>
+    <p class="note" style="margin-top:14px">Une couverture mince et contradictoire est ramenée
+      vers 50 au lieu de fabriquer un chiffre d'apparence assurée à partir de trois articles.
+      Chaque composante est affichée avec sa valeur brute : le score n'est jamais une boîte noire.</p>
+
+    <h2 class="sec">D'où viennent les données</h2>
+    <ul style="color:var(--soft);font-size:.88rem;line-height:1.75;max-width:88ch">
+      <li><strong>Actualités et sentiment</strong> — Alpha Vantage <code>NEWS_SENTIMENT</code>.
+        L'instantané embarqué contient 50 articles réels du 3 au 6 juillet 2024, avec les scores
+        de pertinence et de sentiment renvoyés par l'API.</li>
+      <li><strong>Pertinence par valeur</strong> — celle d'Alpha Vantage pour AAPL, la valeur
+        pour laquelle l'instantané a été extrait. Pour les autres noms, elle est recalculée à
+        partir du texte réel des articles : position de la mention (titre ou résumé), fréquence,
+        et décote pour les revues d'indice qui citent quatre entreprises ou plus.</li>
+      <li><strong>Cours</strong> — série simulée déterministe dans l'instantané, remplacée par
+        <code>TIME_SERIES_DAILY</code> dès qu'une clé est connectée. Les graphiques concernés
+        le signalent.</li>
+      <li><strong>Narratifs</strong> — TF-IDF et agglomération à lien moyen (règle de
+        Lance-Williams), écrits à la main : aucune dépendance d'analyse.</li>
+      <li><strong>Validation</strong> — corrélation de rang de Spearman et test de permutation,
+        également écrits à la main.</li>
+    </ul>
+
+    <h2 class="sec">Limites assumées</h2>
+    <ul style="color:var(--soft);font-size:.88rem;line-height:1.75;max-width:88ch">
+      <li>Le sentiment mesure la façon dont une histoire est écrite, pas ce que vaut une
+        entreprise. Les valeurs à forte communication penchent positif par construction.</li>
+      <li>Sur une fenêtre de quatre jours, la page de validation répondra presque toujours
+        « aucun avantage mesurable ». C'est précisément pourquoi elle existe.</li>
+      <li>Une divergence est une hypothèse. « La presse n'a pas encore été suivie par le cours »
+        est indiscernable de « cette presse n'a aucune importance » sans travail supplémentaire.</li>
+    </ul>
+    <p class="note" style="margin-top:18px"><strong>Outil de recherche. Ceci n'est pas un
+      conseil en investissement.</strong></p>
+  </section>
+
+  <footer class="foot">
+    AlphaPulse — analyse du flux d'actualités du S&amp;P 500.
+    Sentiment et actualités : Alpha Vantage. Univers : 503 valeurs.
+    Outil de recherche, pas un conseil en investissement.
+  </footer>
+</div>
+<script>
+/* =====================================================================
+   AlphaPulse — moteur d'analyse
+   Tout le calcul tourne dans le navigateur : aucune donnée ne sort.
+   ===================================================================== */
+const DATA = {"sectors":["Communication Services","Consumer Discretionary","Consumer Staples","Energy","Financials","Health Care","Industrials","Information Technology","Materials","Real Estate","Utilities"],"universe":[{"t":"AAPL","n":"Apple Inc.","s":7},{"t":"MSFT","n":"Microsoft Corp","s":7},{"t":"AMZN","n":"Amazon.com Inc","s":1},{"t":"NVDA","n":"Nvidia Corp","s":7},{"t":"GOOGL","n":"Alphabet Inc. Class A","s":0},{"t":"META","n":"Meta Platforms, Inc. Class A","s":0},{"t":"GOOG","n":"Alphabet Inc. Class C","s":0},{"t":"TSLA","n":"Tesla, Inc.","s":1},{"t":"BRK.B","n":"Berkshire Hathaway Class B","s":4},{"t":"UNH","n":"Unitedhealth Group Incorporated","s":5},{"t":"AVGO","n":"Broadcom Inc.","s":7},{"t":"LLY","n":"Eli Lilly & Co.","s":5},{"t":"JPM","n":"Jpmorgan Chase & Co.","s":4},{"t":"V","n":"Visa Inc.","s":4},{"t":"XOM","n":"Exxon Mobil Corporation","s":3},{"t":"JNJ","n":"Johnson & Johnson","s":5},{"t":"MA","n":"Mastercard Incorporated","s":4},{"t":"PG","n":"Procter & Gamble Company","s":2},{"t":"HD","n":"Home Depot, Inc.","s":1},{"t":"ADBE","n":"Adobe Inc.","s":7},{"t":"COST","n":"Costco Wholesale Corp","s":2},{"t":"ABBV","n":"Abbvie Inc.","s":5},{"t":"MRK","n":"Merck & Co., Inc.","s":5},{"t":"CVX","n":"Chevron Corporation","s":3},{"t":"CRM","n":"Salesforce, Inc.","s":7},{"t":"PEP","n":"Pepsico, Inc.","s":2},{"t":"KO","n":"Coca-Cola Company","s":2},{"t":"AMD","n":"Advanced Micro Devices","s":7},{"t":"BAC","n":"Bank of America Corporation","s":4},{"t":"WMT","n":"Walmart Inc.","s":2},{"t":"ACN","n":"Accenture Plc","s":7},{"t":"MCD","n":"Mcdonald's Corporation","s":1},{"t":"NFLX","n":"Netflix Inc","s":0},{"t":"CSCO","n":"Cisco Systems, Inc.","s":7},{"t":"TMO","n":"Thermo Fisher Scientific, Inc.","s":5},{"t":"LIN","n":"Linde Plc","s":8},{"t":"INTC","n":"Intel Corp","s":7},{"t":"ABT","n":"Abbott Laboratories","s":5},{"t":"CMCSA","n":"Comcast Corp","s":0},{"t":"WFC","n":"Wells Fargo & Co.","s":4},{"t":"INTU","n":"Intuit Inc","s":7},{"t":"DIS","n":"The Walt Disney Company","s":0},{"t":"ORCL","n":"Oracle Corp","s":7},{"t":"VZ","n":"Verizon Communications","s":0},{"t":"QCOM","n":"Qualcomm Inc","s":7},{"t":"AMGN","n":"Amgen Inc","s":5},{"t":"PFE","n":"Pfizer Inc.","s":5},{"t":"DHR","n":"Danaher Corporation","s":5},{"t":"IBM","n":"International Business Machines Corporation","s":7},{"t":"NKE","n":"Nike, Inc.","s":1},{"t":"TXN","n":"Texas Instruments Incorporated","s":7},{"t":"PM","n":"Philip Morris International Inc.","s":2},{"t":"NOW","n":"Servicenow, Inc.","s":7},{"t":"UNP","n":"Union Pacific Corp.","s":6},{"t":"BA","n":"Boeing Company","s":6},{"t":"SPGI","n":"S&p Global Inc.","s":4},{"t":"CAT","n":"Caterpillar Inc.","s":6},{"t":"HON","n":"Honeywell International, Inc.","s":6},{"t":"COP","n":"Conocophillips","s":3},{"t":"GE","n":"General Electric Company","s":6},{"t":"AMAT","n":"Applied Materials Inc","s":7},{"t":"NEE","n":"Nextra Energy, Inc.","s":10},{"t":"LOW","n":"Lowe's Companies Inc.","s":1},{"t":"BKNG","n":"Booking Holdings Inc.","s":1},{"t":"RTX","n":"Rtx Corporation","s":6},{"t":"GS","n":"Goldman Sachs Group Inc.","s":4},{"t":"PLD","n":"Prologis, Inc.","s":9},{"t":"T","n":"At&t Inc.","s":0},{"t":"ISRG","n":"Intuitive Surgical Inc.","s":5},{"t":"ELV","n":"Elevance Health, Inc.","s":5},{"t":"UPS","n":"United Parcel Service, Inc. Class B","s":6},{"t":"SBUX","n":"Starbucks Corp","s":1},{"t":"MS","n":"Morgan Stanley","s":4},{"t":"MDT","n":"Medtronic Plc","s":5},{"t":"BLK","n":"Blackrock, Inc.","s":4},{"t":"BMY","n":"Bristol-Myers Squibb Co.","s":5},{"t":"TJX","n":"Tjx Companies, Inc.","s":1},{"t":"VRTX","n":"Vertex Pharmaceuticals Inc","s":5},{"t":"DE","n":"Deere & Company","s":6},{"t":"GILD","n":"Gilead Sciences Inc","s":5},{"t":"AXP","n":"American Express Company","s":4},{"t":"LMT","n":"Lockheed Martin Corp.","s":6},{"t":"SYK","n":"Stryker Corporation","s":5},{"t":"MMC","n":"Marsh & Mclennan Companies, Inc.","s":4},{"t":"MDLZ","n":"Mondelez International, Inc. Class A","s":2},{"t":"SCHW","n":"The Charles Schwab Corporation","s":4},{"t":"ADP","n":"Automatic Data Processing","s":6},{"t":"AMT","n":"American Tower Corporation","s":9},{"t":"LRCX","n":"Lam Research Corp","s":7},{"t":"CVS","n":"Cvs Health Corporation","s":5},{"t":"ADI","n":"Analog Devices, Inc.","s":7},{"t":"PANW","n":"Palo Alto Networks, Inc.","s":7},{"t":"C","n":"Citigroup Inc.","s":4},{"t":"ETN","n":"Eaton Corporation, Plcs","s":6},{"t":"PGR","n":"Progressive Corporation","s":4},{"t":"REGN","n":"Regeneron Pharmaceuticals Inc","s":5},{"t":"CB","n":"Chubb Limited","s":4},{"t":"ZTS","n":"Zoetis Inc.","s":5},{"t":"CI","n":"The Cigna Group","s":5},{"t":"MU","n":"Micron Technology, Inc.","s":7},{"t":"SNPS","n":"Synopsys Inc","s":7},{"t":"BX","n":"Blackstone Inc.","s":4},{"t":"BSX","n":"Boston Scientific Corp.","s":5},{"t":"TMUS","n":"T-Mobile Us, Inc.","s":0},{"t":"FI","n":"Fiserv, Inc.","s":4},{"t":"SO","n":"The Southern Company","s":10},{"t":"KLAC","n":"Kla Corporation","s":7},{"t":"CME","n":"Cme Group Inc.","s":4},{"t":"EQIX","n":"Equinix, Inc. Reit","s":9},{"t":"DUK","n":"Duke Energy Corporation","s":10},{"t":"CDNS","n":"Cadence Design Systems","s":7},{"t":"MO","n":"Altria Group, Inc.","s":2},{"t":"SHW","n":"The Sherwin-Williams Company","s":8},{"t":"SLB","n":"Schlumberger Limited","s":3},{"t":"BDX","n":"Becton, Dickinson and Co.","s":5},{"t":"ICE","n":"Intercontinental Exchange Inc.","s":4},{"t":"ITW","n":"Illinois Tool Works Inc.","s":6},{"t":"NOC","n":"Northrop Grumman Corp.","s":6},{"t":"EOG","n":"Eog Resources, Inc.","s":3},{"t":"AON","n":"Aon Plc Class A","s":4},{"t":"PYPL","n":"Paypal Holdings, Inc.","s":4},{"t":"CSX","n":"Csx Corporation","s":6},{"t":"USB","n":"U.S. Bancorp","s":4},{"t":"WM","n":"Waste Management, Inc.","s":6},{"t":"CL","n":"Colgate-Palmolive Company","s":2},{"t":"CMG","n":"Chipotle Mexican Grill, Inc.","s":1},{"t":"TGT","n":"Target Corporation","s":2},{"t":"FDX","n":"Fedex Corporation","s":6},{"t":"MCK","n":"Mckesson Corporation","s":5},{"t":"ABNB","n":"Airbnb, Inc. Class A","s":1},{"t":"MCO","n":"Moody's Corporation","s":4},{"t":"HUM","n":"Humana Inc.","s":5},{"t":"APD","n":"Air Products & Chemicals, Inc.","s":8},{"t":"ORLY","n":"O'reilly Automotive, Inc.","s":1},{"t":"MPC","n":"Marathon Petroleum Corporation","s":3},{"t":"ROP","n":"Roper Technologies, Inc.","s":7},{"t":"PNC","n":"Pnc Financial Services Group","s":4},{"t":"LULU","n":"Lululemon Athletica Inc.","s":1},{"t":"GD","n":"General Dynamics Corporation","s":6},{"t":"ANET","n":"Arista Networks","s":7},{"t":"MMM","n":"3m Company","s":6},{"t":"APH","n":"Amphenol Corporation","s":7},{"t":"NXPI","n":"Nxp Semiconductors N.v.","s":7},{"t":"PSX","n":"Phillips 66","s":3},{"t":"PH","n":"Parker-Hannifin Corporation","s":6},{"t":"FCX","n":"Freeport-Mcmoran Inc.","s":8},{"t":"TDG","n":"Transdigm Group Incorporated","s":6},{"t":"MAR","n":"Marriot International Class A","s":1},{"t":"MSI","n":"Motorola Solutions, Inc.","s":7},{"t":"TT","n":"Trane Technologies Plc","s":6},{"t":"HCA","n":"Hca Healthcare, Inc.","s":5},{"t":"AJG","n":"Arthur J. Gallagher & Co.","s":4},{"t":"EMR","n":"Emerson Electric Co.","s":6},{"t":"PXD","n":"Pioneer Natural Resource Co.","s":3},{"t":"NSC","n":"Norfolk Southern Corp.","s":6},{"t":"ECL","n":"Ecolab, Inc.","s":8},{"t":"WELL","n":"Welltower Inc.","s":9},{"t":"ADSK","n":"Autodesk Inc","s":7},{"t":"CCI","n":"Crown Castle Inc.","s":9},{"t":"CTAS","n":"Cintas Corp","s":6},{"t":"PCAR","n":"Paccar Inc","s":6},{"t":"AZO","n":"Autozone, Inc.","s":1},{"t":"MCHP","n":"Microchip Technology Inc","s":7},{"t":"SRE","n":"Sempra","s":10},{"t":"AIG","n":"American International Group, Inc.","s":4},{"t":"COF","n":"Capital One Financial","s":4},{"t":"DXCM","n":"Dexcom, Inc.","s":5},{"t":"TFC","n":"Truist Financial Corporation","s":4},{"t":"ROST","n":"Ross Stores Inc","s":1},{"t":"GM","n":"General Motors Company","s":1},{"t":"CARR","n":"Carrier Global Corporation","s":6},{"t":"HLT","n":"Hilton Worldwide Holdings Inc.","s":1},{"t":"IDXX","n":"Idexx Laboratories Inc","s":5},{"t":"NEM","n":"Newmont Corporation","s":8},{"t":"EW","n":"Edwards Lifesciences Corp","s":5},{"t":"SPG","n":"Simon Property Group, Inc.","s":9},{"t":"AFL","n":"Aflac Inc.","s":4},{"t":"PSA","n":"Public Storage","s":9},{"t":"F","n":"Ford Motor Company","s":1},{"t":"VLO","n":"Valero Energy Corporation","s":3},{"t":"DHI","n":"D.R. Horton Inc.","s":1},{"t":"CPRT","n":"Copart Inc","s":6},{"t":"TEL","n":"Te Connectivity Ltd","s":7},{"t":"MSCI","n":"Msci, Inc.","s":4},{"t":"AEP","n":"American Electric Power Company, Inc.","s":10},{"t":"TRV","n":"The Travelers Companies, Inc.","s":4},{"t":"WMB","n":"Williams Companies Inc.","s":3},{"t":"MNST","n":"Monster Beverage Corporation","s":2},{"t":"MET","n":"Metlife, Inc.","s":4},{"t":"KMB","n":"Kimberly-Clark Corp.","s":2},{"t":"CNC","n":"Centene Corporation","s":5},{"t":"NUE","n":"Nucor Corporation","s":8},{"t":"IQV","n":"Iqvia Holdings Inc.","s":5},{"t":"D","n":"Dominion Energy, Inc","s":10},{"t":"PAYX","n":"Paychex Inc","s":6},{"t":"DLR","n":"Digital Realty Trust, Inc.","s":9},{"t":"EXC","n":"Exelon Corporation","s":10},{"t":"ADM","n":"Archer Daniels Midland Company","s":2},{"t":"O","n":"Realty Income Corporation","s":9},{"t":"GIS","n":"General Mills, Inc.","s":2},{"t":"BK","n":"Bank of New York Mellon Corporation","s":4},{"t":"A","n":"Agilent Technologies Inc.","s":5},{"t":"LHX","n":"L3harris Technologies, Inc.","s":6},{"t":"OKE","n":"Oneok, Inc.","s":3},{"t":"STZ","n":"Constellation Brands, Inc.","s":2},{"t":"CHTR","n":"Charter Comm Inc Del Cl a","s":0},{"t":"AMP","n":"Ameriprise Financial, Inc.","s":4},{"t":"SYY","n":"Sysco Corporation","s":2},{"t":"OXY","n":"Occidental Petroleum Corporation","s":3},{"t":"PCG","n":"Pg&e Corporation","s":10},{"t":"PRU","n":"Prudential Financial, Inc.","s":4},{"t":"HES","n":"Hess Corporation","s":3},{"t":"ALL","n":"The Allstate Corporation","s":4},{"t":"CEG","n":"Constellation Energy Corporation","s":10},{"t":"AME","n":"Ametek, Inc.","s":6},{"t":"CTSH","n":"Cognizant Technology Solutions","s":7},{"t":"BIIB","n":"Biogen Inc.","s":5},{"t":"OTIS","n":"Otis Worldwide Corporation","s":6},{"t":"IT","n":"Gartner, Inc.","s":6},{"t":"DOW","n":"Dow Inc.","s":8},{"t":"YUM","n":"Yum! Brands, Inc.","s":1},{"t":"LEN","n":"Lennar Corporation Class A","s":1},{"t":"FAST","n":"Fastenal Co","s":6},{"t":"GWW","n":"W.W. Grainger, Inc.","s":6},{"t":"KVUE","n":"Kenvue Inc.","s":2},{"t":"JCI","n":"Johnson Controls International Plc","s":6},{"t":"URI","n":"United Rentals, Inc.","s":6},{"t":"FTNT","n":"Fortinet, Inc.","s":7},{"t":"VRSK","n":"Verisk Analytics, Inc.","s":6},{"t":"FIS","n":"Fidelity National Information Services, Inc.","s":4},{"t":"EA","n":"Electronic Arts Inc","s":0},{"t":"CSGP","n":"Costar Group Inc","s":9},{"t":"ON","n":"On Semiconductor Corp","s":7},{"t":"XEL","n":"Xcel Energy, Inc.","s":10},{"t":"PPG","n":"Ppg Industries, Inc.","s":8},{"t":"ODFL","n":"Old Dominion Freight Line","s":6},{"t":"RSG","n":"Republic Services Inc.","s":6},{"t":"COR","n":"Cencora, Inc.","s":5},{"t":"CMI","n":"Cummins Inc.","s":6},{"t":"KMI","n":"Kinder Morgan, Inc.","s":3},{"t":"GPN","n":"Global Payments, Inc.","s":4},{"t":"KDP","n":"Keurig Dr Pepper Inc.","s":2},{"t":"ROK","n":"Rockwell Automation, Inc.","s":6},{"t":"EL","n":"The Estee Lauder Companies Inc. Class A","s":2},{"t":"DD","n":"Dupont De Nemours, Inc.","s":8},{"t":"BKR","n":"Baker Hughes Company","s":3},{"t":"ED","n":"Consolidated Edison, Inc.","s":10},{"t":"CTVA","n":"Corteva, Inc.","s":8},{"t":"PEG","n":"Public Service Enterprise Group Incorporated","s":10},{"t":"VICI","n":"Vici Properties Inc.","s":9},{"t":"HAL","n":"Halliburton Company","s":3},{"t":"PWR","n":"Quanta Services, Inc.","s":6},{"t":"EXR","n":"Extra Space Storage, Inc.","s":9},{"t":"MLM","n":"Martin Marietta Materials","s":8},{"t":"KHC","n":"The Kraft Heinz Company","s":2},{"t":"IR","n":"Ingersoll Rand Inc.","s":6},{"t":"VMC","n":"Vulcan Materials Company","s":8},{"t":"EFX","n":"Equifax, Incorporated","s":6},{"t":"CDW","n":"Cdw Corporation","s":7},{"t":"KR","n":"The Kroger Co.","s":2},{"t":"MPWR","n":"Monolithic Power Systems, Inc.","s":7},{"t":"FICO","n":"Fair Isaac Corporation","s":7},{"t":"ACGL","n":"Arch Capital Group Ltd","s":4},{"t":"GEHC","n":"Ge Healthcare Technologies Inc.","s":5},{"t":"DG","n":"Dollar General Corp.","s":2},{"t":"RCL","n":"Royal Caribbean Group","s":1},{"t":"HSY","n":"The Hershey Company","s":2},{"t":"DVN","n":"Devon Energy Corporation","s":3},{"t":"CAH","n":"Cardinal Health, Inc.","s":5},{"t":"WEC","n":"Wec Energy Group, Inc.","s":10},{"t":"DLTR","n":"Dollar Tree Inc.","s":2},{"t":"KEYS","n":"Keysight Technologies, Inc.","s":7},{"t":"EIX","n":"Edison International","s":10},{"t":"SBAC","n":"Sba Communications Corp","s":9},{"t":"FANG","n":"Diamondback Energy, Inc.","s":3},{"t":"CBRE","n":"Cbre Group, Inc.","s":9},{"t":"WST","n":"West Pharmaceutical Services, Inc.","s":5},{"t":"DAL","n":"Delta Air Lines, Inc.","s":6},{"t":"DFS","n":"Discover Financial Services","s":4},{"t":"WBD","n":"Warner Bros. Discovery, Inc. Series a","s":0},{"t":"AWK","n":"American Water Works Company, Inc","s":10},{"t":"HPQ","n":"Hp Inc.","s":7},{"t":"XYL","n":"Xylem Inc","s":6},{"t":"MRNA","n":"Moderna, Inc.","s":5},{"t":"WTW","n":"Willis Towers Watson Public Limited Companys","s":4},{"t":"ANSS","n":"Ansys Inc","s":7},{"t":"AVB","n":"Avalonbay Communities, Inc.","s":9},{"t":"TTWO","n":"Take-Two Interactive Software Inc","s":0},{"t":"MTD","n":"Mettler-Toledo International","s":5},{"t":"RMD","n":"Resmed Inc.","s":5},{"t":"FTV","n":"Fortive Corporation","s":6},{"t":"HIG","n":"The Hartford Financial Services Group, Inc.","s":4},{"t":"ZBH","n":"Zimmer Biomet Holdings, Inc.","s":5},{"t":"ULTA","n":"Ulta Beauty, Inc.","s":1},{"t":"STT","n":"State Street Corporation","s":4},{"t":"TSCO","n":"Tractor Supply Co","s":1},{"t":"LYB","n":"Lyondellbasell Industries N.v. Class A","s":8},{"t":"WY","n":"Weyerhaeuser Company","s":9},{"t":"DTE","n":"Dte Energy Company","s":10},{"t":"CHD","n":"Church & Dwight Co., Inc.","s":2},{"t":"APTV","n":"Aptiv Plc","s":1},{"t":"MTB","n":"M&t Bank Corp.","s":4},{"t":"TROW","n":"T Rowe Price Group Inc","s":4},{"t":"BR","n":"Broadridge Financial Solutions Inc","s":6},{"t":"GLW","n":"Corning Incorporated","s":7},{"t":"EBAY","n":"Ebay Inc","s":1},{"t":"ETR","n":"Entergy Corporation","s":10},{"t":"MOH","n":"Molina Healthcare, Inc.","s":5},{"t":"FITB","n":"Fifth Third Bancorp","s":4},{"t":"ES","n":"Eversource Energy","s":10},{"t":"NVR","n":"Nvr, Inc.","s":1},{"t":"WAB","n":"Wabtec Inc.","s":6},{"t":"PHM","n":"Pultegroup, Inc.","s":1},{"t":"HPE","n":"Hewlett Packard Enterprise Company","s":7},{"t":"HWM","n":"Howmet Aerospace Inc.","s":6},{"t":"AEE","n":"Ameren Corporation","s":10},{"t":"EQR","n":"Equity Residential","s":9},{"t":"DOV","n":"Dover Corporation","s":6},{"t":"STE","n":"Steris Plc","s":5},{"t":"RJF","n":"Raymond James Financial, Inc.","s":4},{"t":"PTC","n":"Ptc, Inc","s":7},{"t":"IFF","n":"International Flavors & Fragrances Inc.","s":8},{"t":"INVH","n":"Invitation Homes Inc.","s":9},{"t":"PPL","n":"Ppl Corporation","s":10},{"t":"EXPE","n":"Expedia Group, Inc.","s":1},{"t":"ILMN","n":"Illumina Inc","s":5},{"t":"FE","n":"Firstenergy Corp.","s":10},{"t":"TDY","n":"Teledyne Technologies Incorporated","s":7},{"t":"VRSN","n":"Verisign Inc","s":7},{"t":"LH","n":"Laboratory Corporation of America Holdings","s":5},{"t":"DRI","n":"Darden Restaurants, Inc.","s":1},{"t":"IRM","n":"Iron Mountain Inc.","s":9},{"t":"ARE","n":"Alexandria Real Estate Equities, Inc.","s":9},{"t":"FLT","n":"Fleetcor Technologies, Inc.","s":4},{"t":"VTR","n":"Ventas, Inc.","s":9},{"t":"GPC","n":"Genuine Parts Company","s":1},{"t":"GRMN","n":"Garmin Ltd","s":1},{"t":"NDAQ","n":"Nasdaq, Inc.","s":4},{"t":"CNP","n":"Centerpoint Energy, Inc.","s":10},{"t":"BAX","n":"Baxter International Inc.","s":5},{"t":"TRGP","n":"Targa Resources Corp.","s":3},{"t":"NTAP","n":"Netapp, Inc","s":7},{"t":"CBOE","n":"Cboe Global Markets, Inc.","s":4},{"t":"CTRA","n":"Coterra Energy Inc.","s":3},{"t":"BALL","n":"Ball Corporation","s":8},{"t":"WAT","n":"Waters Corp","s":5},{"t":"CCL","n":"Carnival Corporation","s":1},{"t":"EXPD","n":"Expeditors International of Washington, Inc.","s":6},{"t":"CLX","n":"Clorox Company","s":2},{"t":"STLD","n":"Steel Dynamics Inc","s":8},{"t":"LVS","n":"Las Vegas Sands Corp.","s":1},{"t":"BRO","n":"Brown & Brown, Inc.","s":4},{"t":"AKAM","n":"Akamai Technologies Inc","s":7},{"t":"WBA","n":"Walgreens Boots Alliance, Inc","s":2},{"t":"HBAN","n":"Huntington Bancshares Inc","s":4},{"t":"COO","n":"The Cooper Companies, Inc.","s":5},{"t":"FDS","n":"Factset Research Systems","s":4},{"t":"MKC","n":"Mccormick & Company, Incorporated Non-Vtg Cs","s":2},{"t":"CMS","n":"Cms Energy Corporation","s":10},{"t":"AXON","n":"Axon Enterprise, Inc.","s":6},{"t":"SWKS","n":"Skyworks Solutions Inc","s":7},{"t":"HOLX","n":"Hologic Inc","s":5},{"t":"PFG","n":"Principal Financial Group, Inc.","s":4},{"t":"ATO","n":"Atmos Energy Corporation","s":10},{"t":"LUV","n":"Southwest Airlines Co.","s":6},{"t":"TYL","n":"Tyler Technologies, Inc.","s":7},{"t":"NTRS","n":"Northern Trust Corp","s":4},{"t":"VLTO","n":"Veralto Corporation","s":6},{"t":"RF","n":"Regions Financial Corp.","s":4},{"t":"HUBB","n":"Hubbell Incorporated","s":6},{"t":"EG","n":"Everest Group, Ltd.","s":4},{"t":"CINF","n":"Cincinnati Financial Corp","s":4},{"t":"OMC","n":"Omnicom Group Inc.","s":0},{"t":"ALGN","n":"Align Technology Inc","s":5},{"t":"STX","n":"Seagate Technology Holdings Plcs","s":7},{"t":"ALB","n":"Albemarle Corporation","s":8},{"t":"J","n":"Jacobs Solutions Inc.","s":6},{"t":"WDC","n":"Western Digital Corp.","s":7},{"t":"JBHT","n":"Jb Hunt Transport Services Inc","s":6},{"t":"EPAM","n":"Epam Systems, Inc.","s":7},{"t":"AVY","n":"Avery Dennison Corp.","s":8},{"t":"BG","n":"Bunge Limited","s":2},{"t":"DGX","n":"Quest Diagnostics Inc.","s":5},{"t":"IEX","n":"Idex Corporation","s":6},{"t":"FSLR","n":"First Solar, Inc.","s":7},{"t":"TXT","n":"Textron, Inc.","s":6},{"t":"MAA","n":"Mid-America Apartment Communities, Inc.","s":9},{"t":"SYF","n":"Synchrony Financial","s":4},{"t":"ESS","n":"Essex Property Trust, Inc","s":9},{"t":"LW","n":"Lamb Weston Holdings, Inc.","s":2},{"t":"TER","n":"Teradyne, Inc.","s":7},{"t":"SNA","n":"Snap-on Incorporated","s":6},{"t":"TSN","n":"Tyson Foods, Inc.","s":2},{"t":"LDOS","n":"Leidos Holdings, Inc.","s":6},{"t":"PKG","n":"Packaging Corp of America","s":8},{"t":"MAS","n":"Masco Corporation","s":6},{"t":"CFG","n":"Citizens Financial Group, Inc.","s":4},{"t":"SWK","n":"Stanley Black & Decker, Inc.","s":6},{"t":"WRB","n":"W.R. Berkley Corporation","s":4},{"t":"CF","n":"Cf Industries Holding, Inc.","s":8},{"t":"ENPH","n":"Enphase Energy, Inc.","s":7},{"t":"K","n":"Kellanova","s":2},{"t":"MRO","n":"Marathon Oil Corporation","s":3},{"t":"CAG","n":"Conagra Brands, Inc.","s":2},{"t":"CE","n":"Celanese Corporation","s":8},{"t":"AMCR","n":"Amcor Plcs","s":8},{"t":"PODD","n":"Insulet Corporation","s":5},{"t":"POOL","n":"Pool Corporation","s":1},{"t":"DPZ","n":"Domino's Pizza Inc.","s":1},{"t":"BBY","n":"Best Buy Company, Inc.","s":1},{"t":"UAL","n":"United Airlines Holdings, Inc.","s":6},{"t":"EQT","n":"Eqt Corp","s":3},{"t":"LNT","n":"Alliant Energy Corporation","s":10},{"t":"HST","n":"Host Hotels & Resorts, Inc.","s":9},{"t":"KIM","n":"Kimco Realty Corp.","s":9},{"t":"KEY","n":"Keycorp","s":4},{"t":"L","n":"Loews Corporation","s":4},{"t":"SJM","n":"The J.M. Smucker Company","s":2},{"t":"NDSN","n":"Nordson Corp","s":6},{"t":"AES","n":"Aes Corporation","s":10},{"t":"IP","n":"International Paper Co.","s":8},{"t":"GEN","n":"Gen Digital Inc.","s":7},{"t":"ZBRA","n":"Zebra Technologies Corporation","s":7},{"t":"LYV","n":"Live Nation Entertainment Inc.","s":0},{"t":"LKQ","n":"Lkq Corporation","s":1},{"t":"MGM","n":"Mgm Resorts International","s":1},{"t":"EVRG","n":"Evergy, Inc.","s":10},{"t":"JKHY","n":"Henry (Jack) & Associates","s":4},{"t":"RVTY","n":"Revvity, Inc.","s":5},{"t":"TRMB","n":"Trimble Inc.","s":7},{"t":"ROL","n":"Rollins, Inc.","s":6},{"t":"VTRS","n":"Viatris Inc.","s":5},{"t":"IPG","n":"The Interpublic Group of Companies, Inc.","s":0},{"t":"MOS","n":"The Mosaic Company","s":8},{"t":"INCY","n":"Incyte Genomics Inc","s":5},{"t":"TAP","n":"Molson Coors Beverage Company Class B","s":2},{"t":"TECH","n":"Bio-Techne Corp.","s":5},{"t":"TFX","n":"Teleflex Incorporated","s":5},{"t":"UDR","n":"Udr, Inc.","s":9},{"t":"PNR","n":"Pentair Plc","s":6},{"t":"KMX","n":"Carmax Inc.","s":1},{"t":"NRG","n":"Nrg Energy, Inc.","s":10},{"t":"CRL","n":"Charles River Laboratories International, Inc.","s":5},{"t":"REG","n":"Regency Centers Corporation","s":9},{"t":"NI","n":"Nisource Inc.","s":10},{"t":"GL","n":"Globe Life Inc.","s":4},{"t":"APA","n":"Apa Corporation","s":3},{"t":"CDAY","n":"Ceridian Hcm Holding","s":7},{"t":"QRVO","n":"Qorvo, Inc.","s":7},{"t":"WRK","n":"Westrock Company","s":8},{"t":"PEAK","n":"Healthpeak Properties, Inc.","s":9},{"t":"CPT","n":"Camden Property Trust","s":9},{"t":"ETSY","n":"Etsy, Inc.","s":1},{"t":"EMN","n":"Eastman Chemical Company","s":8},{"t":"FFIV","n":"F5, Inc.","s":7},{"t":"BF.B","n":"Brown-Forman Corporation Class B","s":2},{"t":"HII","n":"Huntington Ingalls Industries, Inc.","s":6},{"t":"MKTX","n":"Marketaxess Holdings Inc.","s":4},{"t":"CZR","n":"Caesars Entertainment, Inc.","s":1},{"t":"AOS","n":"A.O. Smith Corporation","s":6},{"t":"CHRW","n":"C.H. Robinson Worldwide, Inc.","s":6},{"t":"ALLE","n":"Allegion Public Limited Company","s":6},{"t":"HSIC","n":"Henry Schein Inc","s":5},{"t":"PAYC","n":"Paycom Software, Inc.","s":7},{"t":"BXP","n":"Boston Properties, Inc.","s":9},{"t":"HRL","n":"Hormel Foods Corporation","s":2},{"t":"JNPR","n":"Juniper Networks Inc","s":7},{"t":"MTCH","n":"Match Group, Inc","s":0},{"t":"UHS","n":"Universal Health Services, Inc. Class B","s":5},{"t":"AAL","n":"American Airlines Group Inc.","s":6},{"t":"BBWI","n":"Bath & Body Works, Inc.","s":1},{"t":"RHI","n":"Robert Half Inc.","s":6},{"t":"AIZ","n":"Assurant, Inc.","s":4},{"t":"CPB","n":"Campbell Soup Company","s":2},{"t":"PNW","n":"Pinnacle West Capital Corporation","s":10},{"t":"NWSA","n":"News Corporation Class A","s":0},{"t":"WYNN","n":"Wynn Resorts Ltd","s":1},{"t":"TPR","n":"Tapestry, Inc.","s":1},{"t":"NCLH","n":"Norwegian Cruise Line Holdings Ltd.s","s":1},{"t":"BEN","n":"Franklin Resources, Inc.","s":4},{"t":"BWA","n":"Borgwarner Inc.","s":1},{"t":"GNRC","n":"Generac Holdings Inc","s":6},{"t":"FRT","n":"Federal Realty Investment Trust","s":9},{"t":"PARA","n":"Paramount Global Class B","s":0},{"t":"FOXA","n":"Fox Corporation Class A","s":0},{"t":"IVZ","n":"Invesco Ltd","s":4},{"t":"FMC","n":"Fmc Corporation","s":8},{"t":"CTLT","n":"Catalent, Inc.","s":5},{"t":"XRAY","n":"Dentsply Sirona Inc.","s":5},{"t":"CMA","n":"Comerica Incorporated","s":4},{"t":"BIO","n":"Bio-Rad Laboratories, Inc.Class A","s":5},{"t":"HAS","n":"Hasbro, Inc.","s":1},{"t":"WHR","n":"Whirlpool Corp.","s":1},{"t":"VFC","n":"V.F. Corporation","s":1},{"t":"ZION","n":"Zions Bancorporation N.a.","s":4},{"t":"DVA","n":"Davita Inc.","s":5},{"t":"RL","n":"Ralph Lauren Corporation","s":1},{"t":"SEE","n":"Sealed Air Corp.","s":8},{"t":"MHK","n":"Mohawk Industries, Inc.","s":1},{"t":"ALK","n":"Alaska Air Group, Inc.","s":6},{"t":"SEDG","n":"Solaredge Technologies, Inc.","s":7},{"t":"FOX","n":"Fox Corporation Class B","s":0},{"t":"NWS","n":"News Corporation Class B","s":0}],"articles":[{"ti":"Apple Shares Are Surging Friday: What You Need To Know - Apple  ( NASDAQ:AAPL )","su":"Apple Inc. AAPL shares are moving higher Friday. Here's what you need to know. What's Going On: The company is facing new accusations from Epic Games, the creator of \"Fortnite,\" over blocking its efforts to launch a game store on iPhones and iPads in Europe.","u":"https://www.benzinga.com/news/24/07/39650896/apple-shares-are-surging-friday-what-you-need-to-know","so":"Benzinga","d":"2024-07-03T07:00","se":0.1949,"avr":0.9246},{"ti":"Apple's New Artificial Intelligence  ( AI )  Features Could Push This Semiconductor Company to a $1 Trillion Valuation","su":"Apple is betting big on its own chips, and that means this all-important supplier stands to benefit.","u":"https://www.fool.com/investing/2024/07/04/apples-new-artificial-intelligence-ai-features-cou/","so":"Motley Fool","d":"2024-07-04T10:13","se":0.531,"avr":0.8281},{"ti":"The Zacks Analyst Blog Highlights Apple, Alphabet Microsoft and Amazon","su":"Apple, Alphabet Microsoft and Amazon are included in this Analyst Blog.","u":"https://www.zacks.com/stock/news/2297088/the-zacks-analyst-blog-highlights-apple-alphabet-microsoft-and-amazon","so":"Zacks","d":"2024-07-05T13:26","se":0.5306,"avr":0.7935},{"ti":"Time to Take a Bite Out of Apple ETFs Now?","su":"The Apple (AAPL) stock, which has so far been a laggard in the artificial intelligence (AI) race, has picked up momentum.","u":"https://www.zacks.com/stock/news/2297135/time-to-take-a-bite-out-of-apple-etfs-now","so":"Zacks","d":"2024-07-06T16:39","se":0.3725,"avr":0.7903},{"ti":"Apple Approves Epic Games' Marketplace App In Europe Amid Ongoing Feud - Apple  ( NASDAQ:AAPL )","su":"Apple Inc. AAPL has approved the marketplace app of Epic Games, the creator of \"Fortnite,\" for iPhones and iPads in Europe. This move comes amid a continuing conflict between the two tech behemoths.","u":"https://www.benzinga.com/news/24/07/39654022/apple-approves-epic-games-marketplace-app-in-europe-amid-ongoing-feud","so":"Benzinga","d":"2024-07-03T08:52","se":-0.1387,"avr":0.7824},{"ti":"Apple or Nvidia: Which Will Get to $4 Trillion First?","su":"Nvidia has been a growth beast of late, but investors shouldn't forget Apple's potential.","u":"https://www.fool.com/investing/2024/07/04/apple-or-nvidia-which-will-get-to-4-trillion-first/","so":"Motley Fool","d":"2024-07-04T11:05","se":0.4331,"avr":0.6769},{"ti":"Apple, Adobe, Qualcomm And More: CNBC's 'Final Trades' - Apple  ( NASDAQ:AAPL ) , Adobe  ( NASDAQ:ADBE )","su":"On CNBC's \"Halftime Report Final Trades,\" Shannon Saccocia of NB Private Wealth named The Health Care Select Sector SPDR Fund XLV, saying that three sectors likely lead sales growth year-over-year during the second half of the year, energy, technology and health care.","u":"https://www.benzinga.com/trading-ideas/long-ideas/24/07/39647113/apple-adobe-qualcomm-and-more-cnbcs-final-trades","so":"Benzinga","d":"2024-07-05T14:18","se":0.4746,"avr":0.6642},{"ti":"Fortnite Maker Epic Games Accuses Apple Of Blocking Its Game Store Launch - Apple  ( NASDAQ:AAPL ) , iShares U.S. Technology ETF  ( ARCA:IYW )","su":"Epic Games, the creator of \"Fortnite,\" has accused tech giant Apple Inc. AAPL of obstructing its efforts to establish a games store on iPhones and iPads in Europe. This marks the latest development in the ongoing dispute over Apple's control of the iOS app ecosystem.","u":"https://www.benzinga.com/news/24/07/39646883/fortnite-maker-epic-games-accuses-apple-of-blocking-its-game-store-launch","so":"Benzinga","d":"2024-07-06T17:31","se":-0.2278,"avr":0.6367},{"ti":"Apple and Tesla Are the Only \"Magnificent Seven\" Stocks Trailing the S&P 500 So Far This Year. Are They Worth Buying Now?","su":"Are the two lagging members ready for a magnificent turnaround?","u":"https://www.fool.com/investing/2024/07/06/apple-and-tesla-are-the-only-magnificent-seven-sto/","so":"Motley Fool","d":"2024-07-06T09:44","se":0.4464,"avr":0.4649},{"ti":"These 3 Companies Generate Significant Cash","su":"Companies boasting strong cash-generating abilities can be great investments, as they have plenty of cash to fuel growth, pay out dividends, and easily wipe out debt.","u":"https://www.zacks.com/commentary/2297412/these-3-companies-generate-significant-cash","so":"Zacks","d":"2024-07-04T12:57","se":0.3859,"avr":0.4339},{"ti":"3 Warren Buffett Stocks to Hold Forever","su":"Buffett has made a fortune by investing in the American consumer.","u":"https://www.fool.com/investing/2024/07/03/3-warren-buffett-stocks-to-hold-forever/","so":"Motley Fool","d":"2024-07-03T15:10","se":0.1261,"avr":0.4319},{"ti":"Zacks Investment Ideas feature highlights: Amazon, Apple, Alphabet and Nvidia","su":"Amazon, Apple, Alphabet and Nvidia have been highlighted in this Investment Ideas article.","u":"https://www.zacks.com/stock/news/2297083/zacks-investment-ideas-feature-highlights-amazon-apple-alphabet-and-nvidia","so":"Zacks","d":"2024-07-06T07:23","se":0.3978,"avr":0.4112},{"ti":"Market Break Out: 3 Leading Stocks to Buy Now","su":"The stock market continues to charge higher led by the best companies in the world - Apple, Amazon and Alphabet ...","u":"https://www.zacks.com/commentary/2296734/market-break-out-3-leading-stocks-to-buy-now","so":"Zacks","d":"2024-07-03T10:36","se":0.3972,"avr":0.388},{"ti":"OLED Display Leader Has Positive Catalysts Ahead","su":"OLED Stock: Universal Display Has Positive Catalysts Investor's Business Daily ...","u":"https://www.investors.com/news/technology/oled-stock-universal-display-has-positive-catalysts/","so":"Investor's Business Daily","d":"2024-07-04T13:49","se":0.3796,"avr":0.3493},{"ti":"Nvidia, Apple, Amazon, Google, Microsoft And Their Journeys: The Tech Icons That Put America On The World Stage - Apple  ( NASDAQ:AAPL ) , Amazon.com  ( NASDAQ:AMZN )","su":"On July 4th, as Americans celebrate independence, it's also a time to reflect on the iconic companies that have shaped the nation's economy and global influence. From humble beginnings to global giants, these companies embody the essence of innovation, hard work, and the American Dream.","u":"https://www.benzinga.com/news/24/07/39634868/nvidia-apple-amazon-google-microsoft-and-their-journeys-the-tech-icons-that-put-america-on-the-world","so":"Benzinga","d":"2024-07-05T16:02","se":0.2037,"avr":0.3351},{"ti":"Alphabet  ( GOOGL )  to Aid Android Users With Messages App Upgrade","su":"Alphabet (GOOGL) is testing an RCS redesign for the Google Messages app, thereby boosting its Android offerings.","u":"https://www.zacks.com/stock/news/2297289/alphabet-googl-to-aid-android-users-with-messages-app-upgrade","so":"Zacks","d":"2024-07-06T08:15","se":0.2752,"avr":0.307},{"ti":"Masimo  ( MASI )  Fights Politan in a Bid to Retain CEO on Board","su":"Will Masimo (MASI) lose its CEO in its fight against activist investor Politan Capital Management? The company's management and employees want Joe Kiani to continue as the CEO.","u":"https://www.zacks.com/stock/news/2297381/masimo-masi-fights-politan-in-a-bid-to-retain-ceo-on-board","so":"Zacks","d":"2024-07-03T11:28","se":0.0137,"avr":0.2963},{"ti":"Alphabet  ( GOOGL )  Boosts Android Efforts With App Upgrades","su":"Alphabet (GOOGL) boosts Android offerings with Google Photos app update, thereby strengthening its Google Services segment.","u":"https://www.zacks.com/stock/news/2296985/alphabet-googl-boosts-android-efforts-with-app-upgrades","so":"Zacks","d":"2024-07-04T14:41","se":0.2546,"avr":0.2774},{"ti":"Vishay  ( VSH )  Expands Portfolio With Sprague TX3 Capacitors","su":"Vishay (VSH) launches Vishay Sprague TX3 capacitors in a bid to boost its overall portfolio offerings.","u":"https://www.zacks.com/stock/news/2296987/vishay-vsh-expands-portfolio-with-sprague-tx3-capacitors","so":"Zacks","d":"2024-07-05T17:54","se":0.2497,"avr":0.2705},{"ti":"The Zacks Analyst Blog Highlights Apple, Meta, Tesla and Natural Health Trends","su":"Apple, Meta, Tesla and Natural Health Trends are included in this Analyst Blog.","u":"https://www.zacks.com/stock/news/2297086/the-zacks-analyst-blog-highlights-apple-meta-tesla-and-natural-health-trends","so":"Zacks","d":"2024-07-06T09:07","se":0.2217,"avr":0.2573},{"ti":"Elon Musk's X Faces EU Penalty Warning For Failing To Control Harmful Content - Meta Platforms  ( NASDAQ:META )","su":"The European Union is set to issue a formal warning to X, Elon Musk's social media platform ( formerly known as Twitter ) , for failing to tackle dangerous content. This marks the third significant action by EU regulators against major tech firms in recent weeks.","u":"https://www.benzinga.com/news/24/07/39648446/elon-musks-x-faces-eu-penalty-warning-for-failing-to-control-harmful-content","so":"Benzinga","d":"2024-07-03T12:20","se":-0.5274,"avr":0.2517},{"ti":"Taiwan Semiconductor's Expansion in AI and 2nm Technology Set to Boost Future Growth, Analyst Says - Taiwan Semiconductor  ( NYSE:TSM )","su":"Taiwan Semiconductor Manufacturing Co TSM will hold a press conference on July 18. As demand for generative AI continues to expand, UBS gave TSMC a \"Buy\" rating with a target price of 1,070 yuan.","u":"https://www.benzinga.com/analyst-ratings/analyst-color/24/07/39621141/taiwan-semiconductors-expansion-in-ai-and-2nm-technology-set-to-boost-future-growth","so":"Benzinga","d":"2024-07-04T15:33","se":0.116,"avr":0.2491},{"ti":"Futures Mixed Ahead Of Imminent Jobs Report","su":"Stock Market Today: Dow Jones Falls Ahead Of Imminent Jobs Report. Tesla Continues To Rally Investor's Business Daily ...","u":"https://www.investors.com/market-trend/stock-market-today/dow-jones-sp500-nasdaq-jobs-report-tesla-stock-tsla/","so":"Investor's Business Daily","d":"2024-07-05T07:46","se":0.2098,"avr":0.2058},{"ti":"The Zacks Analyst Blog Highlights NVIDIA XLK, Microsoft and Apple","su":"NVIDIA XLK, Microsoft and Apple are included in this Analyst Blog.","u":"https://www.zacks.com/stock/news/2297098/the-zacks-analyst-blog-highlights-nvidia-xlk-microsoft-and-apple","so":"Zacks","d":"2024-07-06T10:59","se":0.1067,"avr":0.1927},{"ti":"Microsoft  ( MSFT )  Settles Discrimination Lawsuit in California","su":"Microsoft (MSFT) reaches a $14.4 million settlement with California's Civil Rights Department over allegations of discrimination against employees on parental and disability leave.","u":"https://www.zacks.com/stock/news/2296906/microsoft-msft-settles-discrimination-lawsuit-in-california","so":"Zacks","d":"2024-07-03T13:12","se":0.104,"avr":0.1867},{"ti":"3 Incredible FAANG Stocks You'll Want to Consider Adding to Your Portfolio in July","su":"They're not creating the mania they used to, but these iconic names are still well worth owning.","u":"https://www.fool.com/investing/2024/07/04/incredible-faang-stocks-add-to-portfolio-july/","so":"Motley Fool","d":"2024-07-04T16:25","se":0.142,"avr":0.1814},{"ti":"Market Clubhouse Morning Memo - July 5th, 2024  ( Trade Strategy For SPY, QQQ, AAPL, MSFT, NVDA, GOOGL, META And TSLA )  - Invesco QQQ Trust, Series 1  ( NASDAQ:QQQ )","su":"Good Morning Traders! In today's Market Clubhouse Morning Memo, we will discuss SPY, QQQ, AAPL, MSFT, NVDA, GOOGL, META, and TSLA. Our proprietary formula, exclusive to Market Clubhouse, dictates these price levels. This dynamic equation takes into account price, volume, and options flow.","u":"https://www.benzinga.com/markets/24/07/39647534/market-clubhouse-morning-memo-july-5th-2024-trade-strategy-for-spy-qqq-aapl-msft-nvda-googl-meta-and","so":"Benzinga","d":"2024-07-05T08:38","se":-0.0641,"avr":0.1583},{"ti":"Can Microsoft Stock Reach $1,000?","su":"In this article, I delve into whether Microsoft's stock could potentially reach $1,000 per share. I analyze Microsoft's dominant market position, recent financial performance, growth catalysts, risks and expert opinions to evaluate the feasibility of this ambitious target.","u":"https://www.forbes.com/sites/investor-hub/article/can-microsoft-stock-reach-1000/","so":"Forbes","d":"2024-07-06T11:51","se":0.1459,"avr":0.1543},{"ti":"Should Vanguard Large-Cap ETF  ( VV )  Be on Your Investing Radar?","su":"Style Box ETF report for VV ...","u":"https://www.zacks.com/stock/news/2297391/should-vanguard-large-cap-etf-vv-be-on-your-investing-radar","so":"Zacks","d":"2024-07-03T14:04","se":0.0711,"avr":0.1331},{"ti":"Top Research Reports for Apple, Meta Platforms & Tesla","su":"Today's Research Daily features new research reports on 16 major stocks, including Apple Inc. (AAPL), Meta Platforms, Inc. (META) and Tesla, Inc. (TSLA), as well as a micro-cap stock Natural Health Trends Corp. ...","u":"https://www.zacks.com/research-daily/2296597/top-research-reports-for-apple-meta-platforms-tesla","so":"Zacks","d":"2024-07-04T17:17","se":0.4059,"avr":0.1327},{"ti":"Single-Stock ETFs Beating the Market on Big \"Mag 7\" Wave","su":"We have highlighted five single-stock ETFs that have outperformed the market so far this year. The solid trend is likely to continue in the second half as well.","u":"https://www.zacks.com/stock/news/2297254/single-stock-etfs-beating-the-market-on-big-mag-7-wave","so":"Zacks","d":"2024-07-05T09:30","se":0.1765,"avr":0.1248},{"ti":"Stock Market Today: S&P 500 and Nasdaq Hit Records as Jobs Growth Slows","su":"Stocks ended a holiday-shortened trading week with fireworks after signs of a slowing labor market raised the odds of a Federal Reserve rate cut coming sooner rather than later. The cannonball in the market's pool Friday was the June jobs report, which revealed a still strong but cooling labor ...","u":"https://www.kiplinger.com/investing/stocks/stock-market-today-sandp-500-and-nasdaq-hit-records-as-jobs-growth-slows","so":"Kiplinger","d":"2024-07-06T12:43","se":-0.116,"avr":0.1042},{"ti":"Should You Buy Into Chipotle's 50-for-1 Stock Split? Maybe...","su":"Stock splits are meaningless from a valuation or business standpoint, but they can have a lot of emotional meaning for investors.","u":"https://www.fool.com/investing/2024/07/05/should-you-buy-into-chipotles-50-for-1-stock-split/","so":"Motley Fool","d":"2024-07-05T15:56","se":0.0451,"avr":0.102},{"ti":"Tech Bull Shares Top Stock Picks For Second Half Of 2024 After AI-Fueled Rally: Do You Own These Stocks?","su":"The technology sector, propelled by the impetus provided by artificial intelligence, was the driving force behind the first-half stock market rally. Despite growing fears of a correction, a bullish analyst suggested on Friday that the rally will go on unhindered.","u":"https://markets.businessinsider.com/news/stocks/tech-bull-shares-top-stock-picks-for-second-half-of-2024-after-ai-fueled-rally-do-you-own-these-stocks-1033532096","so":"Markets Insider","d":"2024-07-04T07:09","se":0.0654,"avr":0.0983},{"ti":"Tech Bull Shares Top Stock Picks For Second Half Of 2024 After AI-Fueled Rally: Do You Own These Stocks? - Invesco QQQ Trust, Series 1  ( NASDAQ:QQQ ) , SPDR Select Sector Fund - Technology  ( ARCA:XLK )","su":"The technology sector, propelled by the impetus provided by artificial intelligence, was the driving force behind the first-half stock market rally. Despite growing fears of a correction, a bullish analyst suggested on Friday that the rally will go on unhindered.","u":"https://www.benzinga.com/analyst-ratings/analyst-color/24/07/39646688/tech-bull-shares-top-stock-picks-for-second-half-of-2024-after-ai-fueled-rally-do-y","so":"Benzinga","d":"2024-07-05T10:22","se":0.068,"avr":0.0944},{"ti":"OpenAI's ChatGPT macOS App Had A Major Security Flaw: Conversations Were Stored In Plain Text","su":"OpenAI's recently launched ChatGPT macOS app for Apple Inc.'s Macs had a significant security vulnerability. The app was storing conversations in plain text, making them easily accessible to unauthorized users. OpenAI has since addressed and resolved this issue.","u":"https://www.benzinga.com/news/24/07/39630828/openais-chatgpt-macos-app-had-a-major-security-flaw-conversations-were-stored-in-plain-text","so":"Benzinga","d":"2024-07-06T13:35","se":0.1096,"avr":0.0929},{"ti":"5 ETF Predictions for the Second Half of 2024","su":"We have highlighted five trends that may influence the market in the rest of the year.","u":"https://www.zacks.com/stock/news/2297317/5-etf-predictions-for-the-second-half-of-2024","so":"Zacks","d":"2024-07-03T16:48","se":0.1389,"avr":0.091},{"ti":"Stocks Rally To Record Highs As Investors Eye Interest Rate Cuts; Labor Market Cools, Tesla Soars: This Week In The Markets","su":"Stocks Rally To Record Highs As Investors Eye Interest Rate Cuts. Labor Market Cools, Tesla Soars: This Week In The ... - Markets Insider ...","u":"https://markets.businessinsider.com/news/etf/stocks-rally-to-record-highs-as-investors-eye-interest-rate-cuts-labor-market-cools-tesla-soars-this-week-in-the-markets-1033533024","so":"Markets Insider","d":"2024-07-04T08:01","se":0.2051,"avr":0.0901},{"ti":"Stocks Rally To Record Highs As Investors Eye Interest Rate Cuts; Labor Market Cools, Tesla Soars: This Week In The Markets - Invesco QQQ Trust, Series 1  ( NASDAQ:QQQ )","su":"U.S. stocks once again reached all-time highs in the shortened trading week due to the Independence Day holiday, as the latest economic data bolstered investor confidence that the Federal Reserve may soon begin cutting interest rates. The U.S. job market showed a better-than-expected increase in ...","u":"https://www.benzinga.com/markets/cryptocurrency/24/07/39652289/stocks-rally-to-record-highs-as-investors-eye-interest-rate-cuts-labor-market-cools-tesla-","so":"Benzinga","d":"2024-07-05T11:14","se":0.2045,"avr":0.0888},{"ti":"Will The Magnificent 7 Eclipse China's Economy In 2024? Here's What To Look For - Apple  ( NASDAQ:AAPL ) , Amazon.com  ( NASDAQ:AMZN )","su":"A small number of technology companies, affectionately named the \"Magnificent 7,\" have accounted for an outsized portion of the SPDR S&P 500 ETF Trust SPY gains in 2024. Will it continue through the rest of the year? The Magnificent 7: The Magnificent 7 comprises seven mega-cap companies:","u":"https://www.benzinga.com/markets/asia/24/07/39652085/will-the-magnificent-7-eclipse-chinas-economy-in-2024-heres-what-to-look-for","so":"Benzinga","d":"2024-07-06T14:27","se":-0.002,"avr":0.0786},{"ti":"5 ETFs That Witnessed Huge Capital Inflows in 1H","su":"Investors poured $406.1 billion into ETFs in the first half of 2024, double of $200.6 billion recorded in the year-ago period. U.S. equity ETFs led the way higher with $223.1 billion in inflows.","u":"https://www.zacks.com/stock/news/2296901/5-etfs-that-witnessed-huge-capital-inflows-in-1h","so":"Zacks","d":"2024-07-03T17:40","se":0.0865,"avr":0.0776},{"ti":"The 2 Most Important Questions in Investing","su":"Arm yourself with knowledge.","u":"https://www.fool.com/investing/2024/07/05/the-2-most-important-questions-in-investing/","so":"Motley Fool","d":"2024-07-05T09:53","se":0.0633,"avr":0.0671},{"ti":"2 \"Magnificent Seven\" Stocks to Buy Right Now","su":"Alphabet and Meta Platforms are both excelling in their respective niches.","u":"https://www.fool.com/investing/2024/07/05/2-magnificent-seven-stocks-to-buy-right-now/","so":"Motley Fool","d":"2024-07-05T12:06","se":0.0533,"avr":0.0657},{"ti":"3 AMG Mutual Funds for Remarkable Returns","su":"Invest in AMG mutual funds like CHTTX, FQUAX and MCGFX for substantial returns.","u":"https://www.zacks.com/stock/news/2296809/3-amg-mutual-funds-for-remarkable-returns","so":"Zacks","d":"2024-07-06T15:19","se":0.051,"avr":0.0644},{"ti":"A Bull Market Is Here: 2 Brilliant Stocks Down 41% and 51% to Buy Right Now","su":"Looking for value plays in today's red-hot stock market? These industry-leading companies look like winners.","u":"https://www.fool.com/investing/2024/07/03/a-bull-market-is-here-2-stocks-to-buy/","so":"Motley Fool","d":"2024-07-03T07:32","se":0.2638,"avr":0.0443},{"ti":"Supercomputer Market size is set to grow by USD 33.45 billion from 2024-2028, Commercial customers increasingly ... - PR Newswire","su":"Supercomputer Market size is set to grow by USD 33.45 billion from 2024-2028, Commercial customers increasingly ... PR ...","u":"https://www.prnewswire.com/news-releases/supercomputer-market-size-is-set-to-grow-by-usd-33-45-billion-from-2024-2028--commercial-customers-increasingly-adopting-supercomputing-systems-to-boost-the-market-growth-technavio-302188185.html","so":"PR Newswire","d":"2024-07-04T10:45","se":0.0315,"avr":0.0354},{"ti":"Smartphone Market size is set to grow by USD 77.05 billion from 2024-2028, Growing adoption of AI in smartphones ... - PR Newswire","su":"Smartphone Market size is set to grow by USD 77.05 billion from 2024-2028, Growing adoption of AI in smartphones ... PR ...","u":"https://www.prnewswire.com/news-releases/smartphone-market-size-is-set-to-grow-by-usd-77-05-billion-from-2024-2028--growing-adoption-of-ai-in-smartphones-boost-the-market-technavio-302189581.html","so":"PR Newswire","d":"2024-07-05T13:58","se":0.0362,"avr":0.0286},{"ti":"Electric Guitar Market size is set to grow by USD 1.45 billion from 2024-2028, Growing demand for music-related leisure activities to boost the market growth, Technavio","su":"NEW YORK, July 3, 2024 /PRNewswire/ -- The global electric guitar market size is estimated to grow by USD 1.45 billion from 2024-2028, according to Technavio. The market is estimated to grow at a CAGR of 10.43% during the forecast period.","u":"https://www.benzinga.com/pressreleases/24/07/n39626359/electric-guitar-market-size-is-set-to-grow-by-usd-1-45-billion-from-2024-2028-growing-demand-for-m","so":"Benzinga","d":"2024-07-06T16:11","se":0.1495,"avr":0.0278},{"ti":"The Top-Performing Actively Managed Funds of the Last Decade","su":"Past performance may be no guarantee of future results, but as any good detective knows, there's no such thing as a coincidence. In the same way, there's something to be said for a mutual fund with a good track record, especially over the past decade.","u":"https://www.kiplinger.com/investing/the-top-performing-actively-managed-funds-of-the-last-decade","so":"Kiplinger","d":"2024-07-03T08:24","se":0.1669,"avr":0.02},{"ti":"Chewy's Bounce and Amazon's Rise","su":"We also chat with William Cohan from Puck about what's going on with Paramount Global.","u":"https://www.fool.com/investing/2024/07/05/chewys-bounce-and-amazons-rise/","so":"Motley Fool","d":"2024-07-05T11:37","se":0.0372,"avr":0.0092}],"coverage":{"AAPL":[[0,0.9246],[1,0.8281],[2,0.7935],[3,0.7903],[4,0.7824],[5,0.6769],[6,0.6642],[7,0.6367],[8,0.4649],[11,0.4112],[12,0.388],[14,0.3351],[19,0.2573],[23,0.1927],[26,0.1583],[29,0.1327],[35,0.0929],[39,0.0786]],"MSFT":[[24,0.95],[27,0.91],[23,0.5848],[2,0.387],[26,0.387],[14,0.279]],"AMZN":[[39,0.78],[49,0.62],[14,0.423],[2,0.387],[11,0.387],[12,0.24]],"NVDA":[[5,0.86],[23,0.5848],[11,0.387],[26,0.387],[14,0.279]],"GOOGL":[[15,0.95],[17,0.95],[2,0.387],[11,0.387],[26,0.387],[14,0.279],[12,0.24],[42,0.24]],"META":[[20,0.78],[29,0.6188],[26,0.387],[42,0.24]],"GOOG":[[17,0.95],[15,0.91],[2,0.387],[11,0.387],[14,0.279],[12,0.24],[42,0.24]],"TSLA":[[19,0.86],[37,0.86],[8,0.62],[38,0.62],[29,0.6188],[26,0.387],[22,0.24]],"BRK.B":[[10,0.86]],"ADBE":[[6,0.6392]],"QCOM":[[6,0.4216]],"CMG":[[32,0.62]],"PARA":[[49,0.24]]},"window":"3 – 6 juillet 2024","source":"Alpha Vantage NEWS_SENTIMENT"};
+
+const ST = {
+  theme: 'dark', tab: 'intel', ticker: 'AAPL', minRel: 0, lookback: 5,
+  live: false, key: '', cache: {}, scrView: 'rank', artSort: 'rel',
+  vHor: 3, vRes: null
+};
+
+/* ---------------------------------------------------------------- utils */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const clamp = (x, a = 0, b = 100) => Math.max(a, Math.min(b, x));
+const rescale = (x, lo, hi) => hi - lo < 1e-9 ? 50 : clamp((x - lo) / (hi - lo) * 100);
+const fmt = (x, d = 2) => (x === null || x === undefined || !isFinite(x)) ? '—'
+  : x.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const sgn = (x, d = 3) => !isFinite(x) ? '—' : (x >= 0 ? '+' : '−') + fmt(Math.abs(x), d);
+const pct = x => !isFinite(x) ? '—' : (x >= 0 ? '+' : '−') + fmt(Math.abs(x) * 100, 2) + ' %';
+const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function tok(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue('--' + name).trim();
+}
+function T() {
+  const k = ['bg','panel','panel2','border','grid','text','soft','muted','accent','accent2',
+             'bull','bullMid','bear','bearMid','neutral','warn','scaleMid'];
+  const o = {}; k.forEach(x => o[x] = tok(x)); return o;
+}
+function sentColor(v) {
+  const t = T();
+  if (v === null || !isFinite(v)) return t.neutral;
+  if (v >= 0.35) return t.bull;
+  if (v >= 0.15) return t.bullMid;
+  if (v <= -0.35) return t.bear;
+  if (v <= -0.15) return t.bearMid;
+  return t.neutral;
+}
+function sentScale() {
+  const t = T();
+  return [[0, t.bear], [0.25, t.bearMid], [0.5, t.scaleMid], [0.75, t.bullMid], [1, t.bull]];
+}
+function seriesColors() {
+  return ST.theme === 'dark'
+    ? ['#4CC9F0','#B892FF','#2ECC8F','#FFB454','#FF5C7A','#67E8F9','#F472B6','#A3E635']
+    : ['#0B6E9E','#5B34AC','#0A7A52','#8F5400','#C01B41','#0F6A75','#9B2A6E','#4A6B0F'];
+}
+function label(v) {
+  if (v >= 0.35) return 'Haussier';
+  if (v >= 0.15) return 'Plutôt haussier';
+  if (v <= -0.35) return 'Baissier';
+  if (v <= -0.15) return 'Plutôt baissier';
+  return 'Neutre';
+}
+
+/* deterministic PRNG so a ticker always gets the same simulated path */
+function hash32(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function mulberry(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function gauss(rnd) {
+  let u = 0, v = 0;
+  while (!u) u = rnd(); while (!v) v = rnd();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+/* ---------------------------------------------------- weighted statistics */
+function wmean(vals, wts) {
+  if (!vals.length) return 0;
+  let sw = 0, s = 0;
+  for (let i = 0; i < vals.length; i++) { const w = Math.max(wts[i] || 0, 0); sw += w; s += w * vals[i]; }
+  if (sw <= 1e-9) return vals.reduce((a, b) => a + b, 0) / vals.length;
+  return s / sw;
+}
+function wstd(vals, wts) {
+  if (vals.length < 2) return 0;
+  const mu = wmean(vals, wts);
+  let sw = 0, s = 0;
+  for (let i = 0; i < vals.length; i++) { const w = Math.max(wts[i] || 0, 0); sw += w; s += w * (vals[i] - mu) ** 2; }
+  if (sw <= 1e-9) {
+    const m = vals.reduce((a, b) => a + b, 0) / vals.length;
+    return Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / vals.length);
+  }
+  return Math.sqrt(Math.max(s / sw, 0));
+}
+
+/* ------------------------------------------------------------- the feed */
+const UNIV = DATA.universe;
+const BY_TK = {}; UNIV.forEach(u => BY_TK[u.t] = u);
+const nameOf = tk => (BY_TK[tk] ? BY_TK[tk].n : tk);
+const sectorOf = tk => (BY_TK[tk] ? DATA.sectors[BY_TK[tk].s] : '—');
+
+function snapshotFeed(tk) {
+  const cov = DATA.coverage[tk];
+  if (!cov) return [];
+  return cov.map(([ai, rel]) => {
+    const a = DATA.articles[ai];
+    return { title: a.ti, summary: a.su, url: a.u, source: a.so,
+             day: a.d.slice(0, 10), time: a.d.slice(11), rel: rel, sent: a.se };
+  });
+}
+function feedFor(tk) {
+  if (ST.live && ST.cache[tk] && ST.cache[tk].news) return ST.cache[tk].news;
+  return snapshotFeed(tk);
+}
+function coveredTickers() {
+  if (ST.live) return Object.keys(ST.cache).filter(t => (ST.cache[t].news || []).length);
+  return Object.keys(DATA.coverage);
+}
+
+/* simulated but deterministic price path, anchored on the news window */
+function bdays(endISO, n) {
+  const out = []; const d = new Date(endISO + 'T00:00:00Z');
+  while (out.length < n) {
+    const w = d.getUTCDay();
+    if (w !== 0 && w !== 6) out.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  return out.reverse();
+}
+function pricesFor(tk) {
+  if (ST.live && ST.cache[tk] && ST.cache[tk].px) return ST.cache[tk].px;
+  const seed = hash32(tk);
+  const rnd = mulberry(seed);
+  // ends well after the news window so forward returns actually exist
+  const dates = bdays('2024-08-16', 150);
+  const start = 60 + (seed % 340);
+  let acc = 0; const close = [];
+  for (let i = 0; i < dates.length; i++) { acc += 0.0006 + 0.014 * gauss(rnd); close.push(start * Math.exp(acc)); }
+  return { dates, close, simulated: true };
+}
+
+/* ----------------------------------------------------------- aggregation */
+function filterFeed(feed, minRel) {
+  const f = minRel > 0 ? feed.filter(a => a.rel >= minRel) : feed;
+  return f.length ? f : feed;          // never leave the user with an empty page
+}
+function dailySeries(feed) {
+  const m = new Map();
+  feed.forEach(a => { if (!m.has(a.day)) m.set(a.day, []); m.get(a.day).push(a); });
+  return [...m.keys()].sort().map(day => {
+    const g = m.get(day);
+    return { day,
+      ws: wmean(g.map(x => x.sent), g.map(x => x.rel)),
+      mean: g.reduce((s, x) => s + x.sent, 0) / g.length,
+      n: g.length,
+      rel: g.reduce((s, x) => s + x.rel, 0) / g.length };
+  });
+}
+function momentum(feed) {
+  if (feed.length < 4) return 0;
+  const s = [...feed].sort((a, b) => (a.day + a.time).localeCompare(b.day + b.time));
+  const cut = Math.floor(s.length / 2);
+  const o = s.slice(0, cut), r = s.slice(cut);
+  if (!o.length || !r.length) return 0;
+  return wmean(r.map(x => x.sent), r.map(x => x.rel)) - wmean(o.map(x => x.sent), o.map(x => x.rel));
+}
+function buzzZ(daily, recent = 2) {
+  if (daily.length < 4) return 0;
+  const c = daily.map(d => d.n);
+  const rec = c.slice(-recent), base = c.slice(0, -recent);
+  if (base.length < 2) return 0;
+  const mu = base.reduce((a, b) => a + b, 0) / base.length;
+  const sd = Math.sqrt(base.reduce((a, b) => a + (b - mu) ** 2, 0) / base.length);
+  const rm = rec.reduce((a, b) => a + b, 0) / rec.length;
+  if (sd <= 1e-9) return Math.abs(rm - mu) < 1e-9 ? 0 : Math.sign(rm - mu) * 3;
+  return Math.max(-5, Math.min(5, (rm - mu) / sd));
+}
+function priceStats(px, lookback) {
+  const c = px.close;
+  if (!c || c.length < 3) return { last: NaN, ret: NaN, retZ: NaN, vol: NaN };
+  const lb = Math.max(1, Math.min(lookback, c.length - 1));
+  const ret = c[c.length - 1] / c[c.length - 1 - lb] - 1;
+  const rets = []; for (let i = 1; i < c.length; i++) rets.push(c[i] / c[i - 1] - 1);
+  const sd = Math.sqrt(rets.reduce((a, b) => a + b * b, 0) / rets.length);
+  let retZ = NaN;
+  if (c.length > lb + 10) {
+    const hz = []; for (let i = lb; i < c.length; i++) hz.push(c[i] / c[i - lb] - 1);
+    const mu = hz.reduce((a, b) => a + b, 0) / hz.length;
+    const s = Math.sqrt(hz.reduce((a, b) => a + (b - mu) ** 2, 0) / hz.length);
+    retZ = s > 1e-9 ? Math.max(-5, Math.min(5, (ret - mu) / s)) : 0;
+  }
+  return { last: c[c.length - 1], ret, retZ, vol: sd * Math.sqrt(252) };
+}
+function divergence(ws, retZ) {
+  if (!isFinite(retZ)) return 0;
+  const sz = Math.max(-5, Math.min(5, ws / 0.20));
+  return Math.max(-5, Math.min(5, sz - retZ));
+}
+
+function digestFor(tk, minRel = ST.minRel, lookback = ST.lookback) {
+  const raw = feedFor(tk);
+  const feed = filterFeed(raw, minRel);
+  const px = pricesFor(tk);
+  const d = dailySeries(feed);
+  const ps = priceStats(px, lookback);
+  const ws = wmean(feed.map(a => a.sent), feed.map(a => a.rel));
+  const srcCount = new Set(feed.map(a => a.source)).size;
+  return {
+    tk, name: nameOf(tk), sector: sectorOf(tk), feed, daily: d, px,
+    n: feed.length, ws,
+    mean: feed.length ? feed.reduce((s, a) => s + a.sent, 0) / feed.length : 0,
+    rel: feed.length ? feed.reduce((s, a) => s + a.rel, 0) / feed.length : 0,
+    mom: momentum(feed), disp: wstd(feed.map(a => a.sent), feed.map(a => a.rel)),
+    buzz: buzzZ(d), sources: srcCount,
+    bull: feed.length ? feed.filter(a => a.sent >= 0.15).length / feed.length : 0,
+    bear: feed.length ? feed.filter(a => a.sent <= -0.15).length / feed.length : 0,
+    last: ps.last, ret: ps.ret, retZ: ps.retZ, vol: ps.vol,
+    div: divergence(ws, ps.retZ), label: label(ws), simulated: !!px.simulated
+  };
+}
+
+/* --------------------------------------------------------------- scoring */
+const W = { sent: .55, mom: .25, edge: .20, vol: .35, rel: .30, cons: .25, buzz: .10 };
+function pulseOf(d) {
+  const pS = rescale(d.ws, -0.35, 0.35);
+  const pM = rescale(d.mom, -0.25, 0.25);
+  const pE = rescale(d.div, -3, 3);
+  const dir = W.sent * pS + W.mom * pM + W.edge * pE;
+  const cV = d.n > 0 ? clamp(100 * Math.log1p(d.n) / Math.log1p(30)) : 0;
+  const cR = rescale(d.rel, 0.05, 0.60);
+  const cC = 100 - rescale(d.disp, 0, 0.45);
+  const cB = rescale(d.buzz, -1.5, 3);
+  const conf = W.vol * cV + W.rel * cR + W.cons * cC + W.buzz * cB;
+  const pulse = clamp(50 + (dir - 50) * (0.4 + 0.6 * conf / 100));
+  let band = 'Neutre', tone = 'neutral';
+  if (pulse >= 70) { band = 'Fortement haussier'; tone = 'bull'; }
+  else if (pulse >= 58) { band = 'Haussier'; tone = 'bull'; }
+  else if (pulse <= 30) { band = 'Fortement baissier'; tone = 'bear'; }
+  else if (pulse <= 42) { band = 'Baissier'; tone = 'bear'; }
+  return { pulse, dir, conf, band, tone,
+    comp: { pS, pM, pE, cV, cR, cC, cB } };
+}
+function explainRows(d, s) {
+  const c = s.comp;
+  return [
+    { g: 'Direction', n: 'Niveau de sentiment', short: 'Sentiment', v: c.pS,
+      raw: sgn(d.ws), note: 'Moyenne pondérée par la pertinence sur la fenêtre.' },
+    { g: 'Direction', n: 'Momentum', short: 'Momentum', v: c.pM,
+      raw: sgn(d.mom), note: 'Moitié récente moins moitié ancienne. La variation bat le niveau.' },
+    { g: 'Direction', n: 'Écart au prix', short: 'Écart prix', v: c.pE,
+      raw: sgn(d.div, 2) + ' σ', note: 'Penchant de la presse moins le mouvement déjà réalisé.' },
+    { g: 'Confiance', n: 'Volume de couverture', short: 'Volume', v: c.cV,
+      raw: d.n + ' articles', note: 'Saturation logarithmique : 30 articles = couverture pleine.' },
+    { g: 'Confiance', n: 'Qualité de pertinence', short: 'Pertinence', v: c.cR,
+      raw: fmt(d.rel), note: 'La couverture parle-t-elle de l\'entreprise, ou de l\'indice ?' },
+    { g: 'Confiance', n: 'Consensus', short: 'Consensus', v: c.cC,
+      raw: 'σ = ' + fmt(d.disp, 3), note: 'Une faible dispersion entre médias = lecture partagée.' },
+    { g: 'Confiance', n: 'Sursaut d\'attention', short: 'Attention', v: c.cB,
+      raw: sgn(d.buzz, 2) + ' σ', note: 'Volume récent contre la base de la fenêtre.' }
+  ];
+}
+function takeaway(d, s) {
+  if (!d.n) return 'Aucune couverture qualifiante dans cette fenêtre.';
+  const dir = { 'Fortement haussier': 'nettement haussier', 'Haussier': 'haussier',
+    'Neutre': 'mitigé', 'Baissier': 'baissier', 'Fortement baissier': 'nettement baissier' }[s.band];
+  const cw = s.conf >= 65 ? 'à forte confiance' : s.conf >= 40 ? 'à confiance modérée' : 'trop mince';
+  let edge = '';
+  if (isFinite(d.div) && Math.abs(d.div) >= 1) {
+    edge = d.div > 0 ? ' La presse devance le mouvement de cours.'
+                     : ' Le cours a déjà devancé la presse.';
+  }
+  return `${d.tk} : flux ${dir} ${cw} (${d.n} article${d.n > 1 ? 's' : ''}, PULSE ${s.pulse.toFixed(0)}).${edge}`;
+}
+</script>
+<script>
+/* =====================================================================
+   Narratifs — TF-IDF + agglomération à lien moyen (Lance-Williams)
+   ===================================================================== */
+const STOP = new Set(`a about above after again against all also am an and any are aren as at be
+because been before being below between both but by can cannot could couldn did didn do does
+doesn doing don down during each few for from further had hadn has hasn have haven having he her
+here hers herself him himself his how i if in into is isn it its itself just let ll me more most
+mustn my myself no nor not now of off on once only or other ought our ours ourselves out over own
+re same shan she should shouldn so some such than that the their theirs them themselves then
+there these they this those through to too under until up ve very was wasn we were weren what
+when where which while who whom why will with won would wouldn you your yours yourself yourselves
+inc corp corporation company companies ltd plc co nasdaq nyse arca amex etf etfs fund funds shares
+share stock stocks market markets investor investors investing investment investments trading
+trade trades traded price prices report reports reported analyst analysts news article articles
+today week weeks month months year years quarter quarterly said says say new update updates
+according via read more here what you need know time times daily zacks benzinga fool motley
+kiplinger forbes prnewswire businessinsider seekingalpha insider`.split(/\s+/));
+
+function tokenize(text) {
+  const out = [];
+  const m = String(text).toLowerCase().match(/[a-z][a-z'\-]{2,}/g) || [];
+  for (const t of m) if (!STOP.has(t) && t.length > 2) out.push(t);
+  return out;
+}
+function docsOf(feed) {
+  return feed.map(a => a.title + ' ' + a.title + ' ' + (a.summary || ''));
+}
+function tfidf(docs, minDf = 2, maxFeat = 3000) {
+  const toks = docs.map(tokenize);
+  const df = new Map();
+  toks.forEach(ts => new Set(ts).forEach(t => df.set(t, (df.get(t) || 0) + 1)));
+  const n = toks.length;
+  const eff = n >= 2 * minDf ? minDf : 1;
+  let vocab = [...df.entries()].sort((a, b) => b[1] - a[1]).filter(e => e[1] >= eff)
+    .slice(0, maxFeat).map(e => e[0]);
+  if (!vocab.length) vocab = [...df.keys()].slice(0, maxFeat);
+  if (!vocab.length) return { mat: [], vocab: [] };
+  const idx = new Map(vocab.map((t, i) => [t, i]));
+  const mat = toks.map(ts => {
+    const row = new Float64Array(vocab.length);
+    ts.forEach(t => { const j = idx.get(t); if (j !== undefined) row[j] += 1; });
+    for (let j = 0; j < row.length; j++) {
+      if (row[j] > 0) row[j] = (1 + Math.log(row[j])) * (Math.log((1 + n) / (1 + df.get(vocab[j]))) + 1);
+    }
+    let nrm = 0; for (let j = 0; j < row.length; j++) nrm += row[j] * row[j];
+    nrm = Math.sqrt(nrm) || 1;
+    for (let j = 0; j < row.length; j++) row[j] /= nrm;
+    return row;
+  });
+  return { mat, vocab };
+}
+/* Average-linkage agglomeration via the Lance-Williams update: merging a and b
+   replaces row a with the size-weighted mean of both. Vectorised, O(n²). */
+function agglomerate(sim, threshold, maxClusters) {
+  const n = sim.length;
+  if (n <= 1) return n ? [[0]] : [];
+  const S = sim.map(r => Float64Array.from(r));
+  for (let i = 0; i < n; i++) S[i][i] = -Infinity;
+  const active = new Array(n).fill(true);
+  const size = new Array(n).fill(1);
+  const mem = Array.from({ length: n }, (_, i) => [i]);
+  let live = n;
+  while (live > 1) {
+    let best = -Infinity, ba = -1, bb = -1;
+    for (let i = 0; i < n; i++) {
+      if (!active[i]) continue;
+      for (let j = i + 1; j < n; j++) {
+        if (!active[j]) continue;
+        if (S[i][j] > best) { best = S[i][j]; ba = i; bb = j; }
+      }
+    }
+    if (ba < 0 || !isFinite(best)) break;
+    if (best < threshold && live <= maxClusters) break;
+    const wa = size[ba], wb = size[bb];
+    for (let j = 0; j < n; j++) S[ba][j] = (wa * S[ba][j] + wb * S[bb][j]) / (wa + wb);
+    for (let j = 0; j < n; j++) S[j][ba] = S[ba][j];
+    S[ba][ba] = -Infinity;
+    active[bb] = false;
+    for (let j = 0; j < n; j++) { S[bb][j] = -Infinity; S[j][bb] = -Infinity; }
+    size[ba] = wa + wb;
+    mem[ba] = mem[ba].concat(mem[bb]); mem[bb] = [];
+    live--;
+  }
+  return mem.filter((m, i) => active[i] && m.length);
+}
+function narratives(feed, threshold = 0.16, maxClusters = 6, minSize = 2) {
+  if (!feed || feed.length < 3) {
+    return feed && feed.length ? [{ name: feed[0].title.slice(0, 60), n: feed.length,
+      sent: wmean(feed.map(a => a.sent), feed.map(a => a.rel)), share: 1,
+      members: feed.map((_, i) => i) }] : [];
+  }
+  const { mat, vocab } = tfidf(docsOf(feed));
+  if (!vocab.length) return [];
+  const sim = mat.map(r => {
+    const row = new Float64Array(mat.length);
+    for (let j = 0; j < mat.length; j++) { let s = 0; for (let k = 0; k < r.length; k++) s += r[k] * mat[j][k]; row[j] = s; }
+    return row;
+  });
+  const groups = agglomerate(sim, threshold, maxClusters).sort((a, b) => b.length - a.length);
+  const rows = [];
+  groups.forEach(members => {
+    if (members.length < minSize && rows.length) return;
+    const sub = members.map(i => feed[i]);
+    const wsum = new Float64Array(vocab.length);
+    members.forEach(i => { for (let j = 0; j < vocab.length; j++) wsum[j] += mat[i][j]; });
+    const top = [...wsum.keys()].sort((a, b) => wsum[b] - wsum[a]).filter(j => wsum[j] > 0).slice(0, 3);
+    rows.push({
+      name: top.length ? top.map(j => vocab[j].toUpperCase()).join(' · ') : 'Couverture mixte',
+      n: members.length,
+      sent: wmean(sub.map(a => a.sent), sub.map(a => a.rel)),
+      rel: sub.reduce((s, a) => s + a.rel, 0) / sub.length,
+      share: members.length / feed.length, members
+    });
+  });
+  return rows.sort((a, b) => b.n - a.n);
+}
+function termLift(feed, topN = 14, minDocs = 2) {
+  if (!feed || feed.length < 3) return [];
+  const sets = docsOf(feed).map(d => new Set(tokenize(d)));
+  const counts = new Map();
+  sets.forEach(s => s.forEach(t => counts.set(t, (counts.get(t) || 0) + 1)));
+  const base = wmean(feed.map(a => a.sent), feed.map(a => a.rel));
+  const rows = [];
+  [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 160).forEach(([term, c]) => {
+    if (c < minDocs) return;
+    const sub = feed.filter((_, i) => sets[i].has(term));
+    if (!sub.length) return;
+    const s = wmean(sub.map(a => a.sent), sub.map(a => a.rel));
+    rows.push({ term, n: c, sent: s, lift: s - base });
+  });
+  return rows.sort((a, b) => Math.abs(b.lift) - Math.abs(a.lift) || b.n - a.n).slice(0, topN);
+}
+
+/* =====================================================================
+   Validation — IC de Spearman et test de permutation
+   ===================================================================== */
+const MIN_OBS = 4;
+function ranks(x) {
+  const idx = [...x.keys()].sort((a, b) => x[a] - x[b]);
+  const r = new Array(x.length);
+  let i = 0;
+  while (i < idx.length) {
+    let j = i;
+    while (j + 1 < idx.length && x[idx[j + 1]] === x[idx[i]]) j++;
+    const avg = (i + j) / 2 + 1;
+    for (let k = i; k <= j; k++) r[idx[k]] = avg;
+    i = j + 1;
+  }
+  return r;
+}
+function spearman(x, y) {
+  if (x.length < 2 || x.length !== y.length) return NaN;
+  const rx = ranks(x), ry = ranks(y);
+  const mx = rx.reduce((a, b) => a + b, 0) / rx.length;
+  const my = ry.reduce((a, b) => a + b, 0) / ry.length;
+  let num = 0, sx = 0, sy = 0;
+  for (let i = 0; i < rx.length; i++) {
+    num += (rx[i] - mx) * (ry[i] - my); sx += (rx[i] - mx) ** 2; sy += (ry[i] - my) ** 2;
+  }
+  if (sx < 1e-12 || sy < 1e-12) return NaN;
+  return num / Math.sqrt(sx * sy);
+}
+/* The signal on day t is paired with the return from the NEXT session's close to
+   the close h sessions later — nothing inside the window is known at signal time. */
+function alignSignal(daily, px, h, key = 'ws') {
+  const out = [];
+  if (!daily.length || !px.close || px.close.length <= h + 1) return out;
+  for (const d of daily) {
+    let entry = -1;
+    for (let i = 0; i < px.dates.length; i++) { if (px.dates[i] > d.day) { entry = i; break; } }
+    if (entry < 0 || entry + h >= px.close.length) continue;
+    out.push({ day: d.day, sig: d[key], fwd: px.close[entry + h] / px.close[entry] - 1 });
+  }
+  return out;
+}
+function icTest(daily, px, h, perms, key = 'ws') {
+  const paired = alignSignal(daily, px, h, key);
+  const n = paired.length;
+  const res = { h, n, nEff: n / Math.max(h, 1), ic: NaN, p: NaN, hit: NaN, nullDist: [] };
+  if (n < MIN_OBS) return res;
+  const sig = paired.map(p => p.sig), fwd = paired.map(p => p.fwd);
+  res.ic = spearman(sig, fwd);
+  res.hit = paired.filter(p => Math.sign(p.sig) === Math.sign(p.fwd)).length / n;
+  if (!isFinite(res.ic)) return res;
+  const rnd = mulberry(hash32('perm' + h + n));
+  const nd = [];
+  for (let k = 0; k < perms; k++) {
+    const s = sig.slice();
+    for (let i = s.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [s[i], s[j]] = [s[j], s[i]]; }
+    const v = spearman(s, fwd);
+    if (isFinite(v)) nd.push(v);
+  }
+  res.nullDist = nd;
+  if (nd.length) {
+    const ge = nd.filter(v => Math.abs(v) >= Math.abs(res.ic)).length;
+    res.p = (1 + ge) / (nd.length + 1);
+  }
+  return res;
+}
+function verdictOf(rows) {
+  const usable = rows.filter(r => isFinite(r.ic) && isFinite(r.p));
+  if (!usable.length) {
+    return { label: 'Intestable', tone: 'neutral',
+      text: `Il n'y a pas assez d'historique commun entre actualités et cours pour mesurer quoi ` +
+            `que ce soit. C'est l'état normal d'une fenêtre de quelques jours : ce n'est pas un ` +
+            `mauvais résultat, c'est l'absence de résultat.` };
+  }
+  const thin = Math.max(...usable.map(r => r.nEff)) < 20;
+  const sig = usable.filter(r => r.p < 0.05);
+  const best = usable.reduce((a, b) => Math.abs(b.ic) > Math.abs(a.ic) ? b : a);
+  if (!sig.length) {
+    return { label: 'Aucun avantage mesurable', tone: 'neutral',
+      text: `Aucun horizon ne bat sa propre distribution nulle au seuil p < 0,05. Le meilleur IC ` +
+            `est de ${sgn(best.ic)} à ${best.h} séance${best.h > 1 ? 's' : ''}, soit le genre de ` +
+            `chiffre que le hasard produit couramment à cette taille d'échantillon. ` +
+            `Le signal doit être considéré comme non démontré.` };
+  }
+  const b = sig.reduce((a, c) => Math.abs(c.ic) > Math.abs(a.ic) ? c : a);
+  return { label: 'Signal présent dans l\'échantillon', tone: b.ic > 0 ? 'bull' : 'bear',
+    text: `IC de ${sgn(b.ic)} à ${b.h} séance${b.h > 1 ? 's' : ''}, p de permutation = ` +
+          `${fmt(b.p, 3)} sur ${b.n} jours d'actualités.` +
+          (thin ? ` Mais l'échantillon effectif reste sous 20 observations indépendantes : ` +
+                  `c'est au mieux suggestif, un seul cycle de résultats peut le produire par hasard.`
+                : ` À instruire sur une fenêtre hors échantillon plus longue, coûts de transaction inclus.`) };
+}
+
+/* ------------------------------------------------------- note d'analyste */
+function analystNote(d, s) {
+  const feed = [...d.feed].map((a, i) => ({ ...a, i: i + 1 }));
+  const ranked = [...feed].sort((a, b) => b.sent - a.sent);
+  const strong = [...feed].sort((a, b) => b.rel - a.rel).slice(0, 3);
+  const bull = ranked.filter(a => a.sent > 0.1).slice(0, 3);
+  const bear = ranked.filter(a => a.sent < 0).reverse().slice(0, 3);
+  const conv = Math.round(clamp(50 + d.ws * 90 + d.mom * 40 - d.disp * 60));
+  const risk = d.disp > 0.28 ? 'Élevé' : d.disp > 0.18 ? 'Modéré' : 'Contenu';
+  const sn = Math.round(clamp(100 - d.disp * 100));
+  const nar = `Le sentiment pondéré par la pertinence ressort à ${sgn(d.ws)} sur ${d.n} article` +
+    `${d.n > 1 ? 's' : ''} issus de ${d.sources} source${d.sources > 1 ? 's' : ''}, avec un momentum de ` +
+    `${sgn(d.mom)} et une dispersion de ${fmt(d.disp, 3)}. ` +
+    (d.rel >= 0.5 ? `La couverture est majoritairement consacrée à l'entreprise elle-même.`
+      : d.rel >= 0.25 ? `Une part notable de la couverture reste du traitement d'indice plutôt que du sujet dédié.`
+        : `L'essentiel de la couverture est du remplissage d'indice : la valeur y est citée, pas traitée.`) +
+    (Math.abs(d.div) >= 1 ? (d.div > 0
+      ? ` L'écart au prix est positif : la presse lit mieux que ce que la cotation a fait.`
+      : ` L'écart au prix est négatif : le cours a déjà intégré, et au-delà, ce que dit la presse.`) : '');
+  return { conv, sn, risk, one: takeaway(d, s), nar, bull, bear, strong,
+    horizon: d.n >= 12 ? 'Semaines' : 'Jours',
+    falsifier: `Un basculement du sentiment pondéré de plus de ${fmt(Math.max(0.15, d.disp), 2)} ` +
+      `ou la disparition de la couverture dédiée.` };
+}
+</script>
+<script>
+/* =====================================================================
+   Graphiques — Plotly, entièrement pilotés par les tokens du thème
+   ===================================================================== */
+const PCFG = { displaylogo: false, responsive: true,
+  modeBarButtonsToRemove: ['select2d', 'lasso2d', 'toggleSpikelines',
+    'hoverClosestCartesian', 'hoverCompareCartesian'] };
+
+function base(h, legend = false, m = { l: 52, r: 16, t: 22, b: 40 }) {
+  const t = T();
+  return {
+    height: h, template: ST.theme === 'dark' ? 'plotly_dark' : 'plotly_white',
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: t.text, size: 12 },
+    margin: { l: m.l, r: m.r, t: m.t, b: m.b + (legend ? 30 : 0) },
+    showlegend: legend,
+    legend: { orientation: 'h', yanchor: 'top', y: -0.18, x: 0, xanchor: 'left',
+      bgcolor: 'rgba(0,0,0,0)', font: { size: 11, color: t.soft } },
+    hoverlabel: { bgcolor: t.panel, bordercolor: t.border, font: { color: t.text, size: 12 } },
+    modebar: { bgcolor: 'rgba(0,0,0,0)', color: t.muted, activecolor: t.accent },
+    colorway: seriesColors(),
+    xaxis: { gridcolor: t.grid, zeroline: false, linecolor: t.grid,
+      tickfont: { color: t.muted, size: 11 }, title: { font: { color: t.soft, size: 12 } } },
+    yaxis: { gridcolor: t.grid, zeroline: false, linecolor: t.grid,
+      tickfont: { color: t.muted, size: 11 }, title: { font: { color: t.soft, size: 12 } } }
+  };
+}
+const draw = (id, data, layout) => Plotly.react(id, data, layout, PCFG);
+const dayLabel = d => new Date(d + 'T12:00:00Z')
+  .toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', timeZone: 'UTC' });
+
+function chGauge(s) {
+  const t = T();
+  draw('chGauge', [{
+    type: 'indicator', mode: 'gauge+number', value: s.pulse,
+    number: { font: { size: 44, color: t.text }, valueformat: '.0f' },
+    title: { text: s.band, font: { size: 13, color: t.muted } },
+    gauge: {
+      axis: { range: [0, 100], tickwidth: 1, tickcolor: t.grid,
+        tickfont: { size: 10, color: t.muted } },
+      bar: { color: t.accent, thickness: 0.26 }, bgcolor: 'rgba(0,0,0,0)', borderwidth: 0,
+      steps: [
+        { range: [0, 42], color: tok('bearWash') },
+        { range: [42, 58], color: tok('neutralWash') },
+        { range: [58, 100], color: tok('bullWash') }],
+      threshold: { line: { color: t.text, width: 2 }, thickness: .8, value: 50 }
+    }
+  }], Object.assign(base(226, false, { l: 22, r: 22, t: 34, b: 10 })));
+}
+function chOverlay(d) {
+  const t = T();
+  const px = d.px, dl = d.daily;
+  const dmap = new Map(dl.map(x => [x.day, x]));
+  const sx = px.dates.filter(x => dmap.has(x));
+  const sy = sx.map(x => dmap.get(x).ws);
+  const data = [{
+    x: px.dates, y: px.close, type: 'scatter', mode: 'lines', name: 'Cours',
+    line: { color: t.accent, width: 2 },
+    hovertemplate: '%{x}<br>%{y:,.2f}<extra></extra>'
+  }];
+  if (sx.length) data.push({
+    x: sx, y: sy, type: 'bar', name: 'Sentiment', yaxis: 'y2', opacity: .85,
+    marker: { color: sy.map(sentColor), line: { width: 0 } },
+    hovertemplate: '%{x}<br>sentiment %{y:+.3f}<extra></extra>'
+  });
+  const L = base(330, true);
+  L.yaxis.title.text = d.simulated ? 'Cours (simulé)' : 'Cours';
+  L.yaxis2 = { title: { text: 'Sentiment', font: { color: t.soft, size: 12 } },
+    overlaying: 'y', side: 'right', range: [-1, 1], showgrid: false, zeroline: true,
+    zerolinecolor: t.grid, tickfont: { color: t.muted, size: 11 } };
+  L.bargap = .6;
+  if (d.simulated) L.annotations = [{ x: 0, y: 1.07, xref: 'paper', yref: 'paper',
+    showarrow: false, xanchor: 'left', text: 'série de cours simulée — connectez une clé pour les cours réels',
+    font: { size: 10, color: t.warn } }];
+  draw('chOverlay', data, L);
+}
+function chDaily(d) {
+  const t = T(); const dl = d.daily;
+  if (!dl.length) return draw('chDaily', [], base(280));
+  const x = dl.map(r => r.day), y = dl.map(r => r.ws);
+  const data = [{ x, y, type: 'bar', name: 'Sentiment pondéré',
+    marker: { color: y.map(sentColor), line: { width: 0 } },
+    customdata: dl.map(r => r.n),
+    hovertemplate: '%{x}<br>sentiment %{y:+.3f}<br>%{customdata} articles<extra></extra>' }];
+  if (dl.length >= 3) {
+    const roll = y.map((_, i) => {
+      const s = y.slice(Math.max(0, i - 2), i + 1);
+      return s.reduce((a, b) => a + b, 0) / s.length;
+    });
+    data.push({ x, y: roll, type: 'scatter', mode: 'lines', name: 'Moyenne 3 jours',
+      line: { color: t.accent, width: 2, shape: 'spline' },
+      hovertemplate: 'moyenne %{y:+.3f}<extra></extra>' });
+  }
+  const L = base(280, true);
+  L.shapes = [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 0, y1: 0,
+    line: { color: t.muted, width: 1, dash: 'dot' } }];
+  draw('chDaily', data, L);
+}
+function chScatter(d) {
+  const t = T(); const f = d.feed;
+  if (!f.length) return draw('chScatter', [], base(300));
+  draw('chScatter', [{
+    x: f.map(a => a.sent), y: f.map(a => a.rel), mode: 'markers', type: 'scatter',
+    marker: { size: f.map(a => Math.max(8, Math.min(30, a.rel * 26 + 8))),
+      color: f.map(a => a.sent), colorscale: sentScale(), cmin: -.6, cmax: .6,
+      line: { width: 1, color: t.bg }, opacity: .92 },
+    text: f.map(a => a.title.slice(0, 88)), customdata: f.map(a => a.source),
+    hovertemplate: '<b>%{text}</b><br>%{customdata}<br>sentiment %{x:+.3f} · pertinence %{y:.2f}<extra></extra>'
+  }], Object.assign(base(300), {
+    xaxis: Object.assign(base(0).xaxis, { title: { text: 'Sentiment' }, range: [-1, 1] }),
+    yaxis: Object.assign(base(0).yaxis, { title: { text: 'Pertinence' }, range: [0, 1.02] }),
+    shapes: [{ type: 'line', x0: 0, x1: 0, yref: 'paper', y0: 0, y1: 1,
+      line: { color: t.muted, width: 1, dash: 'dot' } },
+      { type: 'line', xref: 'paper', x0: 0, x1: 1, y0: .35, y1: .35,
+        line: { color: t.grid, width: 1, dash: 'dash' } }]
+  }));
+}
+function chSources(d) {
+  const t = T();
+  const m = new Map();
+  d.feed.forEach(a => { if (!m.has(a.source)) m.set(a.source, []); m.get(a.source).push(a); });
+  const rows = [...m.entries()].map(([s, g]) => ({ s, n: g.length,
+    v: wmean(g.map(x => x.sent), g.map(x => x.rel)) }))
+    .sort((a, b) => a.n - b.n).slice(-10);
+  if (!rows.length) return draw('chSources', [], base(280));
+  draw('chSources', [{
+    x: rows.map(r => r.v), y: rows.map(r => r.s), type: 'bar', orientation: 'h',
+    marker: { color: rows.map(r => sentColor(r.v)), line: { width: 0 } },
+    customdata: rows.map(r => r.n),
+    hovertemplate: '<b>%{y}</b><br>sentiment %{x:+.3f}<br>%{customdata} articles<extra></extra>'
+  }], Object.assign(base(280, false, { l: 140, r: 16, t: 18, b: 40 }), {
+    xaxis: Object.assign(base(0).xaxis, { title: { text: 'Sentiment pondéré' }, range: [-1, 1] }),
+    shapes: [{ type: 'line', x0: 0, x1: 0, yref: 'paper', y0: 0, y1: 1,
+      line: { color: t.muted, width: 1, dash: 'dot' } }]
+  }));
+}
+function chRadar(rows) {
+  const t = T();
+  const th = rows.map(r => r.short).concat([rows[0].short]);
+  const rr = rows.map(r => r.v).concat([rows[0].v]);
+  draw('chRadar', [{
+    type: 'scatterpolar', r: rr, theta: th, fill: 'toself',
+    line: { color: t.accent, width: 2 }, fillcolor: tok('accentWash'),
+    hovertemplate: '%{theta} : %{r:.0f}/100<extra></extra>'
+  }], Object.assign(base(300, false, { l: 56, r: 56, t: 30, b: 30 }), {
+    polar: { bgcolor: 'rgba(0,0,0,0)',
+      radialaxis: { range: [0, 100], gridcolor: t.grid, angle: 90,
+        tickfont: { size: 9, color: t.muted } },
+      angularaxis: { gridcolor: t.grid, tickfont: { size: 10, color: t.muted } } }
+  }));
+}
+function chNarr(rows) {
+  if (!rows.length) return draw('chNarr', [], base(300));
+  const r = rows.slice(0, 8).reverse();
+  draw('chNarr', [{
+    x: r.map(a => a.n), y: r.map(a => a.name), type: 'bar', orientation: 'h',
+    marker: { color: r.map(a => sentColor(a.sent)), line: { width: 0 } },
+    customdata: r.map(a => [a.sent, a.share * 100]),
+    hovertemplate: '<b>%{y}</b><br>%{x} articles · %{customdata[1]:.0f} %' +
+      '<br>sentiment %{customdata[0]:+.3f}<extra></extra>'
+  }], Object.assign(base(300, false, { l: 190, r: 16, t: 18, b: 40 }), {
+    xaxis: Object.assign(base(0).xaxis, { title: { text: 'Articles' } })
+  }));
+}
+function chTerms(rows) {
+  const t = T();
+  if (!rows.length) return draw('chTerms', [], base(300));
+  const r = rows.slice(0, 14).reverse();
+  draw('chTerms', [{
+    x: r.map(a => a.lift), y: r.map(a => a.term), type: 'bar', orientation: 'h',
+    marker: { color: r.map(a => a.lift > 0 ? t.bull : t.bear), line: { width: 0 } },
+    customdata: r.map(a => [a.n, a.sent]),
+    hovertemplate: '<b>%{y}</b><br>écart %{x:+.3f}<br>%{customdata[0]} articles · ' +
+      'sentiment %{customdata[1]:+.3f}<extra></extra>'
+  }], Object.assign(base(300, false, { l: 110, r: 16, t: 18, b: 40 }), {
+    xaxis: Object.assign(base(0).xaxis, { title: { text: 'Écart de sentiment' } }),
+    shapes: [{ type: 'line', x0: 0, x1: 0, yref: 'paper', y0: 0, y1: 1,
+      line: { color: t.muted, width: 1, dash: 'dot' } }]
+  }));
+}
+function chRank(rows) {
+  const t = T();
+  if (!rows.length) return draw('chRank', [], base(360));
+  const r = rows.slice(0, 22).reverse();
+  draw('chRank', [{
+    x: r.map(a => a.pulse - 50), base: 50, y: r.map(a => a.tk), type: 'bar', orientation: 'h',
+    marker: { color: r.map(a => sentColor(a.ws)), line: { width: 0 } },
+    customdata: r.map(a => [a.pulse, a.ws, a.n, a.sector]),
+    hovertemplate: '<b>%{y}</b> · %{customdata[3]}<br>PULSE %{customdata[0]:.0f}' +
+      '<br>sentiment %{customdata[1]:+.3f}<br>%{customdata[2]} articles<extra></extra>'
+  }], Object.assign(base(Math.max(300, r.length * 34 + 80), false, { l: 66, r: 16, t: 18, b: 42 }), {
+    xaxis: Object.assign(base(0).xaxis, { title: { text: 'PULSE' }, range: [0, 100] }),
+    shapes: [{ type: 'line', x0: 50, x1: 50, yref: 'paper', y0: 0, y1: 1,
+      line: { color: t.muted, width: 1, dash: 'dot' } }]
+  }));
+}
+function chTree(rows) {
+  const t = T();
+  if (!rows.length) return draw('chTree', [], base(380));
+  const secs = [...new Set(rows.map(r => r.sector))].sort();
+  const labels = rows.map(r => r.tk).concat(secs);
+  const parents = rows.map(r => r.sector).concat(secs.map(() => ''));
+  const vals = rows.map(r => Math.max(r.n, 1))
+    .concat(secs.map(s => rows.filter(r => r.sector === s).reduce((a, b) => a + Math.max(b.n, 1), 0)));
+  const cols = rows.map(r => r.ws)
+    .concat(secs.map(s => { const g = rows.filter(r => r.sector === s);
+      return g.reduce((a, b) => a + b.ws, 0) / g.length; }));
+  const cd = rows.map(r => [r.pulse, r.ws, r.n])
+    .concat(secs.map(s => { const g = rows.filter(r => r.sector === s);
+      return [g.reduce((a, b) => a + b.pulse, 0) / g.length,
+              g.reduce((a, b) => a + b.ws, 0) / g.length,
+              g.reduce((a, b) => a + b.n, 0)]; }));
+  draw('chTree', [{
+    type: 'treemap', labels, parents, values: vals, branchvalues: 'total',
+    marker: { colors: cols, colorscale: sentScale(), cmid: 0, cmin: -.5, cmax: .5,
+      line: { width: 1, color: t.bg } },
+    customdata: cd, texttemplate: '<b>%{label}</b><br>%{customdata[0]:.0f}',
+    textfont: { size: 13, color: t.text },
+    hovertemplate: '<b>%{label}</b><br>PULSE %{customdata[0]:.0f}<br>' +
+      'sentiment %{customdata[1]:+.3f}<br>%{customdata[2]:.0f} articles<extra></extra>'
+  }], Object.assign(base(400, false, { l: 4, r: 4, t: 26, b: 4 })));
+}
+function chDiv(rows) {
+  const t = T();
+  const r = rows.filter(x => isFinite(x.retZ));
+  if (!r.length) return draw('chDiv', [], base(380));
+  draw('chDiv', [{
+    x: r.map(a => a.retZ), y: r.map(a => a.ws), mode: 'markers+text', type: 'scatter',
+    text: r.map(a => a.tk), textposition: 'top center',
+    textfont: { size: 10, color: t.muted },
+    marker: { size: r.map(a => Math.max(9, Math.min(34, a.n * 1.7 + 9))),
+      color: r.map(a => a.pulse), colorscale: sentScale(), cmin: 20, cmax: 80,
+      line: { width: 1, color: t.bg }, opacity: .92 },
+    customdata: r.map(a => [a.pulse, a.n]),
+    hovertemplate: '<b>%{text}</b><br>cours z %{x:+.2f}<br>sentiment %{y:+.3f}' +
+      '<br>PULSE %{customdata[0]:.0f}<extra></extra>'
+  }], Object.assign(base(400, false, { l: 56, r: 20, t: 40, b: 46 }), {
+    xaxis: Object.assign(base(0).xaxis, { title: { text: 'Mouvement de cours (z-score)' } }),
+    yaxis: Object.assign(base(0).yaxis, { title: { text: 'Sentiment de la presse' } }),
+    shapes: [{ type: 'line', x0: 0, x1: 0, yref: 'paper', y0: 0, y1: 1, line: { color: t.grid, width: 1 } },
+      { type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 0, y1: 0, line: { color: t.grid, width: 1 } }],
+    annotations: [
+      { x: 0, y: 1.07, xref: 'paper', yref: 'paper', showarrow: false, xanchor: 'left',
+        text: '◤ bonne presse, cours immobile', font: { size: 10, color: t.bull } },
+      { x: 1, y: 1.07, xref: 'paper', yref: 'paper', showarrow: false, xanchor: 'right',
+        text: 'cours parti, presse absente ◥', font: { size: 10, color: t.bear } }]
+  }));
+}
+function chIC(rows) {
+  const t = T();
+  const u = rows.filter(r => isFinite(r.ic));
+  if (!u.length) return draw('chIC', [], base(280));
+  draw('chIC', [{
+    x: u.map(r => r.h + ' j'), y: u.map(r => r.ic), type: 'bar',
+    marker: { color: u.map(r => (isFinite(r.p) && r.p < .05) ? (r.ic > 0 ? t.bull : t.bear) : t.neutral),
+      line: { width: 0 } },
+    customdata: u.map(r => [r.p, r.n]),
+    hovertemplate: 'horizon %{x}<br>IC %{y:+.3f}<br>p = %{customdata[0]:.3f}' +
+      '<br>n = %{customdata[1]:.0f}<extra></extra>'
+  }], Object.assign(base(280, false, { l: 56, r: 16, t: 20, b: 44 }), {
+    xaxis: Object.assign(base(0).xaxis, { title: { text: 'Horizon' } }),
+    yaxis: Object.assign(base(0).yaxis, { title: { text: 'IC de Spearman' } }),
+    shapes: [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 0, y1: 0,
+      line: { color: t.muted, width: 1, dash: 'dot' } }]
+  }));
+}
+function chNull(res) {
+  const t = T();
+  if (!res || !res.nullDist.length) return draw('chNull', [], base(280));
+  draw('chNull', [{
+    x: res.nullDist, type: 'histogram', nbinsx: 40, name: 'Hasard',
+    marker: { color: t.neutral, opacity: .38, line: { width: 1, color: t.border } },
+    hovertemplate: 'IC %{x:+.3f}<br>%{y} tirages<extra></extra>'
+  }], Object.assign(base(280, false, { l: 56, r: 16, t: 30, b: 44 }), {
+    xaxis: Object.assign(base(0).xaxis, { title: { text: 'IC sous réétiquetage aléatoire' } }),
+    yaxis: Object.assign(base(0).yaxis, { title: { text: 'Occurrences' } }),
+    bargap: .02,
+    shapes: [{ type: 'line', x0: res.ic, x1: res.ic, yref: 'paper', y0: 0, y1: 1,
+      line: { color: t.accent, width: 3 } }],
+    annotations: [{ x: res.ic, y: 1.04, yref: 'paper', showarrow: false,
+      text: 'observé ' + sgn(res.ic), font: { size: 11, color: t.accent } }]
+  }));
+}
+</script>
+<script>
+/* =====================================================================
+   Rendu
+   ===================================================================== */
+function cell(v, kind) {
+  const t = T();
+  if (v === null || v === undefined || (typeof v === 'number' && !isFinite(v)))
+    return { h: '—', c: kind === 'text' || kind === 'strong' || kind === 'wrap' ? '' : 'num',
+             s: 'color:' + t.muted };
+  switch (kind) {
+    case 'strong': return { h: esc(v), c: 'strong', s: '' };
+    case 'wrap': return { h: esc(v), c: 'wrap', s: '' };
+    case 'int': return { h: Math.round(v).toLocaleString('fr-FR'), c: 'num', s: '' };
+    case 'f1': return { h: fmt(v, 1), c: 'num', s: '' };
+    case 'f2': return { h: fmt(v, 2), c: 'num', s: '' };
+    case 'f3': return { h: fmt(v, 3), c: 'num', s: '' };
+    case 's2': return { h: sgn(v, 2), c: 'num', s: '' };
+    case 's3': return { h: sgn(v, 3), c: 'num', s: '' };
+    case 'sent': return { h: sgn(v, 3), c: 'num', s: 'color:' + sentColor(v) };
+    case 'pct': return { h: pct(v), c: 'num', s: '' };
+    case 'p': return { h: fmt(v, 3), c: 'num',
+      s: v < .05 ? 'color:' + t.bull + ';font-weight:700' : 'color:' + t.muted };
+    case 'bar': {
+      const x = clamp(v);
+      return { h: `<div class="barwrap"><div class="bar"><i style="width:${x.toFixed(0)}%;`
+        + `background:${sentColor((x - 50) / 100)}"></i></div><b>${x.toFixed(0)}</b></div>`,
+        c: '', s: '' };
+    }
+    default: return { h: esc(v), c: '', s: '' };
+  }
+}
+function tbl(rows, cols, maxH = 420, emptyMsg = 'Rien à afficher.') {
+  if (!rows || !rows.length) return `<div class="empty">${esc(emptyMsg)}</div>`;
+  const keys = Object.keys(cols);
+  const head = keys.map(k => {
+    const kind = cols[k][1];
+    const num = !['text', 'strong', 'wrap'].includes(kind);
+    return `<th class="${num ? 'num' : ''}">${esc(cols[k][0])}</th>`;
+  }).join('');
+  const body = rows.map(r => '<tr>' + keys.map(k => {
+    const c = cell(r[k], cols[k][1]);
+    return `<td class="${c.c}"${c.s ? ` style="${c.s}"` : ''}>${c.h}</td>`;
+  }).join('') + '</tr>').join('');
+  return `<div class="tw" style="max-height:${maxH}px"><table class="t"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+function artHTML(a) {
+  const col = sentColor(a.sent);
+  return `<div class="art" style="border-left-color:${col}">
+    <a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.title)}</a>
+    <div class="meta">${dayLabel(a.day)} · ${esc(a.source)} · pertinence ${fmt(a.rel)}
+      · <span style="color:${col}">sentiment ${sgn(a.sent)}</span></div>
+    <div class="body">${esc((a.summary || '').slice(0, 260))}</div></div>`;
+}
+
+/* --------------------------------------------------------------- VALEUR */
+let CUR = null;
+function renderIntel() {
+  const tk = ST.ticker;
+  const d = digestFor(tk);
+  const s = pulseOf(d);
+  CUR = { d, s };
+
+  if (!d.n) {
+    $('#intelHead').innerHTML = `<h2 class="sec">${esc(tk)} — ${esc(nameOf(tk))}</h2>
+      <div class="empty">Cette valeur n'est citée par aucun article de la fenêtre
+      (${esc(DATA.window)}). C'est la réponse honnête d'un moteur de flux : pas de couverture,
+      pas de score. Connectez une clé Alpha Vantage pour analyser les 503 valeurs en direct,
+      ou choisissez une valeur couverte ci-dessous.</div>
+      <div class="chips">${coveredTickers().slice(0, 14)
+        .map(t => `<button class="chip" data-jump="${t}">${t}</button>`).join('')}</div>`;
+    $('#intelCards').innerHTML = '';
+    $('#intelProv').innerHTML = '';
+    ['chGauge','chOverlay','chDaily','chScatter','chSources','chRadar']
+      .forEach(id => Plotly.purge(id));
+    $('#tblAudit').innerHTML = ''; $('#note').innerHTML = ''; $('#artList').innerHTML = '';
+    wireJumps();
+    return;
+  }
+
+  $('#intelHead').innerHTML = `<h2 class="sec">${esc(tk)} — ${esc(d.name)}</h2>
+    <p class="note" style="margin-bottom:8px">${esc(d.sector)} · ${d.n} article${d.n > 1 ? 's' : ''}
+      · ${d.sources} source${d.sources > 1 ? 's' : ''} · fenêtre ${esc(DATA.window)}</p>
+    <div class="quote"><span class="pill ${s.tone}">${esc(s.band)}</span> &nbsp; ${esc(takeaway(d, s))}</div>`;
+
+  const cards = [
+    ['PULSE', s.pulse.toFixed(0), s.band, s.tone],
+    ['Sentiment pondéré', sgn(d.ws), d.label, d.ws >= .15 ? 'bull' : d.ws <= -.15 ? 'bear' : ''],
+    ['Momentum', sgn(d.mom), 'récent vs. ancien', d.mom >= .02 ? 'bull' : d.mom <= -.02 ? 'bear' : ''],
+    ['Divergence', sgn(d.div, 2) + ' σ',
+      !isFinite(d.retZ) ? 'pas de cours' : Math.abs(d.div) < .25 ? 'aligné au cours'
+        : d.div > 0 ? 'presse devant' : 'cours devant',
+      Math.abs(d.div) >= 1.5 ? 'warn' : ''],
+    ['Attention', sgn(d.buzz, 2) + ' σ', 'vs. base de fenêtre', d.buzz >= 1.5 ? 'warn' : ''],
+    ['Dernier cours', isFinite(d.last) ? fmt(d.last) : '—',
+      isFinite(d.ret) ? pct(d.ret) + ' / ' + ST.lookback + ' séances' : 'indisponible',
+      d.ret > 0 ? 'bull' : d.ret < 0 ? 'bear' : '']
+  ];
+  const tc = { bull: 'var(--bull)', bear: 'var(--bear)', warn: 'var(--warn)' };
+  $('#intelCards').innerHTML = cards.map(([k, v, sub, tone]) =>
+    `<div class="card"><div class="k">${esc(k)}</div>
+      <div class="v"${tone && tc[tone] ? ` style="color:${tc[tone]}"` : ''}>${v}</div>
+      <div class="s">${esc(sub)}</div></div>`).join('');
+
+  $('#intelProv').innerHTML =
+    `<span class="pill ${ST.live ? 'bull' : 'neutral'}">${ST.live ? 'Actualités : en direct' : 'Actualités : instantané réel'}</span>
+     <span class="pill ${d.simulated ? 'warn' : 'bull'}">${d.simulated ? 'Cours : simulés' : 'Cours : réels'}</span>
+     ${tk === 'AAPL' ? '<span class="pill neutral">Pertinence : scores Alpha Vantage</span>'
+       : '<span class="pill neutral">Pertinence : recalculée sur le texte</span>'}`;
+
+  $('#vDir').textContent = s.dir.toFixed(0) + '/100';
+  $('#vConf').textContent = s.conf.toFixed(0) + '/100';
+  chGauge(s); chOverlay(d); chDaily(d); chScatter(d); chSources(d);
+  const rows = explainRows(d, s);
+  chRadar(rows);
+  $('#tblAudit').innerHTML = tbl(rows.map(r =>
+    ({ g: r.g, n: r.n, v: r.v, raw: r.raw, note: r.note })), {
+    g: ['Groupe', 'text'], n: ['Composante', 'strong'], v: ['Score', 'bar'],
+    raw: ['Valeur brute', 'text'], note: ['Ce que ça veut dire', 'wrap'] }, 340);
+
+  const nt = analystNote(d, s);
+  $('#note').innerHTML = `
+    <div class="quote" style="margin-bottom:12px">${esc(nt.one)}</div>
+    <div class="cards" style="margin-bottom:14px">
+      <div class="card"><div class="k">Conviction</div><div class="v">${nt.conv}/100</div></div>
+      <div class="card"><div class="k">Signal / bruit</div><div class="v">${nt.sn}/100</div></div>
+      <div class="card"><div class="k">Risque</div><div class="v" style="font-size:1.15rem">${esc(nt.risk)}</div></div>
+      <div class="card"><div class="k">Horizon</div><div class="v" style="font-size:1.15rem">${esc(nt.horizon)}</div></div>
+    </div>
+    <p style="color:var(--soft);font-size:.9rem;max-width:88ch">${esc(nt.nar)}</p>
+    <div class="two" style="margin-top:8px">
+      <div><h3 class="sub">Ce qui porte</h3>${nt.bull.length
+        ? nt.bull.map(a => `<div class="art" style="border-left-color:var(--bull)">
+            <a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.title)}</a>
+            <div class="meta">${esc(a.source)} · sentiment ${sgn(a.sent)} · pertinence ${fmt(a.rel)}</div></div>`).join('')
+        : '<p class="note">Aucun article franchement positif dans la fenêtre.</p>'}</div>
+      <div><h3 class="sub">Ce qui pèse</h3>${nt.bear.length
+        ? nt.bear.map(a => `<div class="art" style="border-left-color:var(--bear)">
+            <a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.title)}</a>
+            <div class="meta">${esc(a.source)} · sentiment ${sgn(a.sent)} · pertinence ${fmt(a.rel)}</div></div>`).join('')
+        : '<p class="note">Aucun article franchement négatif dans la fenêtre.</p>'}</div>
+    </div>
+    <h3 class="sub">Ce qui invaliderait cette lecture</h3>
+    <p style="color:var(--soft);font-size:.9rem">${esc(nt.falsifier)}</p>`;
+
+  renderArticles(d);
+  renderNarr();
+}
+function renderArticles(d) {
+  const f = [...d.feed];
+  if (ST.artSort === 'rel') f.sort((a, b) => b.rel - a.rel);
+  else if (ST.artSort === 'sent') f.sort((a, b) => b.sent - a.sent);
+  else f.sort((a, b) => (b.day + b.time).localeCompare(a.day + a.time));
+  $('#artList').innerHTML = f.map(artHTML).join('') ||
+    '<div class="empty">Aucun article.</div>';
+}
+
+/* ------------------------------------------------------------ NARRATIFS */
+function renderNarr() {
+  if (!CUR || !CUR.d.n) {
+    $('#narrList').innerHTML = '<div class="empty">Choisissez une valeur couverte.</div>';
+    Plotly.purge('chNarr'); Plotly.purge('chTerms'); return;
+  }
+  const feed = CUR.d.feed;
+  const nar = narratives(feed);
+  chNarr(nar); chTerms(termLift(feed));
+  $('#narrList').innerHTML = nar.map(c => `<details class="clu">
+    <summary>${esc(c.name)} — ${c.n} article${c.n > 1 ? 's' : ''}
+      (${(c.share * 100).toFixed(0)} %) · sentiment ${sgn(c.sent)}</summary>
+    ${c.members.map(i => feed[i]).sort((a, b) => b.rel - a.rel).slice(0, 8).map(artHTML).join('')}
+  </details>`).join('') || '<div class="empty">Pas assez d\'articles pour former des groupes.</div>';
+}
+
+/* ------------------------------------------------------------- SCREENER */
+function screenRows() {
+  return coveredTickers().map(tk => {
+    const d = digestFor(tk, 0, ST.lookback);
+    const s = pulseOf(d);
+    return { tk, name: d.name, sector: d.sector, pulse: s.pulse, band: s.band,
+      dir: s.dir, conf: s.conf, ws: d.ws, mom: d.mom, disp: d.disp, buzz: d.buzz,
+      div: d.div, n: d.n, rel: d.rel, ret: d.ret, retZ: d.retZ, last: d.last };
+  }).sort((a, b) => b.pulse - a.pulse);
+}
+function renderScreen() {
+  const minN = +$('#scrMin').value;
+  const rows = screenRows().filter(r => r.n >= minN);
+  const bulls = rows.filter(r => r.pulse >= 58).length;
+  const bears = rows.filter(r => r.pulse <= 42).length;
+  const med = rows.length ? [...rows].map(r => r.pulse).sort((a, b) => a - b)[Math.floor(rows.length / 2)] : NaN;
+  $('#scrCards').innerHTML = [
+    ['Valeurs notées', rows.length, 'couvertes par le flux', ''],
+    ['Flux haussier', bulls, 'PULSE ≥ 58', 'bull'],
+    ['Flux baissier', bears, 'PULSE ≤ 42', 'bear'],
+    ['PULSE médian', isFinite(med) ? med.toFixed(0) : '—', 'sur le screen', ''],
+    ['Mentions analysées', rows.reduce((a, b) => a + b.n, 0),
+      'couples article × valeur', '']
+  ].map(([k, v, sub, tone]) => `<div class="card"><div class="k">${esc(k)}</div>
+      <div class="v"${tone ? ` style="color:var(--${tone})"` : ''}>${v}</div>
+      <div class="s">${esc(sub)}</div></div>`).join('');
+  chRank(rows); chTree(rows); chDiv(rows);
+  $('#svTbl').innerHTML = tbl(rows, {
+    tk: ['Valeur', 'strong'], name: ['Société', 'text'], sector: ['Secteur', 'text'],
+    pulse: ['PULSE', 'bar'], band: ['Lecture', 'text'], ws: ['Sentiment', 'sent'],
+    mom: ['Momentum', 's3'], disp: ['Dispersion', 'f3'], buzz: ['Attention', 's2'],
+    div: ['Divergence', 's2'], n: ['Articles', 'int'], rel: ['Pertinence', 'f2'],
+    ret: ['Rendement', 'pct'], last: ['Dernier', 'f2'] }, 520,
+    'Aucune valeur ne franchit ce seuil d\'articles.');
+}
+
+/* ------------------------------------------------------------ VALIDATION */
+const HORIZONS = [1, 2, 3, 5, 10];
+function renderValid() {
+  const tk = $('#vTk').value || ST.ticker;
+  const perms = +$('#vPerm').value;
+  const d = digestFor(tk, 0, ST.lookback);
+  if (!d.n) {
+    $('#vVerdict').innerHTML = '<div class="empty">Valeur non couverte par la fenêtre.</div>';
+    Plotly.purge('chIC'); Plotly.purge('chNull');
+    $('#tblIC').innerHTML = ''; $('#tblVar').innerHTML = ''; $('#nullNote').textContent = '';
+    return;
+  }
+  const rows = HORIZONS.map(h => icTest(d.daily, d.px, h, perms));
+  ST.vRes = { rows, d };
+  const v = verdictOf(rows);
+  $('#vVerdict').innerHTML = `<div class="verdict"><span class="pill ${v.tone}">${esc(v.label)}</span>
+    <div style="margin-top:.55rem;color:var(--soft);font-size:.9rem">${esc(v.text)}</div>
+    ${d.simulated ? `<div class="warnnote">Cours simulés dans l'instantané : ce test mesure la
+      mécanique du protocole, pas la réalité du marché. Connectez une clé pour des cours réels.</div>`
+      : ''}</div>`;
+  chIC(rows);
+  $('#tblIC').innerHTML = tbl(rows.map(r => ({ h: r.h, ic: r.ic, p: r.p, n: r.n,
+    ne: r.nEff, hit: r.hit })), {
+    h: ['Horizon (j)', 'int'], ic: ['IC Spearman', 's3'], p: ['p permutation', 'p'],
+    n: ['Jours d\'actu.', 'int'], ne: ['n effectif', 'f1'], hit: ['Taux de signe', 'f2'] }, 260)
+    + `<p class="note"><strong>n effectif</strong> divise le nombre brut par l'horizon :
+       des fenêtres qui se chevauchent partagent des jours, ce ne sont pas des observations
+       indépendantes. Un p calculé sur 8 observations effectives ne vaut presque rien.</p>`;
+
+  const usable = rows.filter(r => r.nullDist.length);
+  const sel = $('#vHor');
+  sel.innerHTML = usable.map(r => `<option value="${r.h}">${r.h} séance${r.h > 1 ? 's' : ''}</option>`).join('');
+  if (usable.length) {
+    if (!usable.some(r => r.h === ST.vHor)) ST.vHor = usable[0].h;
+    sel.value = ST.vHor;
+    showNull();
+  } else {
+    Plotly.purge('chNull');
+    $('#nullNote').textContent = 'Pas assez de jours d\'actualités appariés pour construire une distribution nulle.';
+  }
+
+  const variants = [
+    ['Sentiment pondéré', 'ws'], ['Sentiment brut', 'mean'],
+    ['Variation de sentiment', 'delta'], ['Attention (volume z)', 'buzz']
+  ];
+  const vr = variants.map(([nm, key]) => {
+    let dl = d.daily.map(x => ({ ...x }));
+    if (key === 'delta') dl = dl.map((x, i) => ({ ...x, ws: i ? x.ws - d.daily[i - 1].ws : 0 }));
+    else if (key === 'buzz') {
+      const c = dl.map(x => x.n);
+      const mu = c.reduce((a, b) => a + b, 0) / c.length;
+      const sd = Math.sqrt(c.reduce((a, b) => a + (b - mu) ** 2, 0) / c.length) || 1;
+      dl = dl.map(x => ({ ...x, ws: (x.n - mu) / sd }));
+    } else if (key === 'mean') dl = dl.map(x => ({ ...x, ws: x.mean }));
+    const rs = HORIZONS.map(h => icTest(dl, d.px, h, Math.min(perms, 1000)))
+      .filter(r => isFinite(r.ic));
+    if (!rs.length) return { nm, ic: NaN, h: null, p: NaN };
+    const b = rs.reduce((a, c) => Math.abs(c.ic) > Math.abs(a.ic) ? c : a);
+    return { nm, ic: b.ic, h: b.h, p: b.p };
+  }).sort((a, b) => Math.abs(b.ic || 0) - Math.abs(a.ic || 0));
+  $('#tblVar').innerHTML = tbl(vr, { nm: ['Signal', 'strong'], ic: ['|IC| max', 's3'],
+    h: ['À l\'horizon (j)', 'int'], p: ['p permutation', 'p'] }, 260);
+}
+function showNull() {
+  if (!ST.vRes) return;
+  const r = ST.vRes.rows.find(x => x.h === ST.vHor);
+  chNull(r);
+  $('#nullNote').textContent = r && r.nullDist.length
+    ? `L'histogramme compte ${r.nullDist.length} réétiquetages aléatoires des mêmes données. `
+      + `Si la ligne bleue tombe au milieu du paquet, l'IC observé de ${sgn(r.ic)} est ce à quoi `
+      + `ressemble le bruit.` : '';
+}
+</script>
+<script>
+/* =====================================================================
+   Mode direct — Alpha Vantage, clé fournie par le visiteur
+   ===================================================================== */
+const AV = 'https://www.alphavantage.co/query';
+function avLabel(x) { return x; }
+async function avJson(params) {
+  const u = new URL(AV);
+  Object.entries(params).forEach(([k, v]) => u.searchParams.set(k, v));
+  u.searchParams.set('apikey', ST.key);
+  const r = await fetch(u.toString());
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  for (const f of ['Error Message', 'Note', 'Information']) {
+    if (j[f]) {
+      const m = String(j[f]);
+      throw new Error(/spreading out|rate limit|per (second|minute|day)|premium/i.test(m)
+        ? 'Limite de l\'API atteinte : la clé gratuite autorise environ 1 requête par seconde '
+          + 'et 25 par jour. Réessayez dans un instant.'
+        : m.slice(0, 200));
+    }
+  }
+  return j;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function normNews(j, tk) {
+  const feed = j.feed || [];
+  const out = [];
+  feed.forEach(it => {
+    const ts = it.ticker_sentiment || [];
+    const hit = ts.find(x => String(x.ticker).toUpperCase() === tk);
+    if (!hit) return;
+    const d = String(it.time_published || '');
+    out.push({
+      title: it.title || '', summary: it.summary || '', url: it.url || '',
+      source: it.source || '',
+      day: d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6, 8),
+      time: d.slice(9, 11) + ':' + d.slice(11, 13),
+      rel: parseFloat(hit.relevance_score) || 0,
+      sent: parseFloat(hit.ticker_sentiment_score) || 0
+    });
+  });
+  const seen = new Set();
+  return out.filter(a => !seen.has(a.title) && seen.add(a.title));
+}
+function normPx(j) {
+  const key = Object.keys(j).find(k => k.indexOf('Time Series') === 0);
+  if (!key) return { dates: [], close: [] };
+  const rows = Object.entries(j[key]).map(([d, v]) => [d, parseFloat(v['4. close'])])
+    .filter(r => isFinite(r[1])).sort((a, b) => a[0].localeCompare(b[0]));
+  return { dates: rows.map(r => r[0]), close: rows.map(r => r[1]), simulated: false };
+}
+async function loadLive(tk) {
+  const msg = $('#liveMsg');
+  msg.innerHTML = `<span class="spin"></span> Chargement de ${tk} en direct…`;
+  try {
+    const from = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10).replace(/-/g, '');
+    const news = normNews(await avJson({ function: 'NEWS_SENTIMENT', tickers: tk,
+      sort: 'RELEVANCE', limit: 200, time_from: from + 'T0000' }), tk);
+    await sleep(1300);                        // la clé gratuite limite par seconde
+    let px = { dates: [], close: [] };
+    try { px = normPx(await avJson({ function: 'TIME_SERIES_DAILY', symbol: tk,
+      outputsize: 'compact' })); } catch (e) { /* les cours peuvent manquer */ }
+    ST.cache[tk] = { news, px: px.close.length ? px : pricesFor(tk) };
+    msg.innerHTML = `<span class="pill bull">${tk} en direct</span>
+      ${news.length} articles · ${px.close.length ? px.close.length + ' séances de cours réels'
+        : 'cours indisponibles'}`;
+    return true;
+  } catch (e) {
+    msg.innerHTML = `<span class="pill bear">Échec</span> ${esc(e.message)}`;
+    return false;
+  }
+}
+
+/* =====================================================================
+   Interactions
+   ===================================================================== */
+function setTheme(name) {
+  ST.theme = name;
+  document.documentElement.setAttribute('data-theme', name);
+  $('#btnTheme').textContent = name === 'dark' ? '🌙 Sombre' : '☀️ Clair';
+  try { localStorage.setItem('ap-theme', name); } catch (e) {}
+  redrawAll();
+}
+function redrawAll() {
+  renderIntel();
+  if (ST.tab === 'screen') renderScreen();
+  if (ST.tab === 'valid' && ST.vRes) { chIC(ST.vRes.rows); showNull(); }
+}
+function showTab(name) {
+  ST.tab = name;
+  $$('nav.tabs button').forEach(b =>
+    b.setAttribute('aria-selected', b.dataset.tab === name ? 'true' : 'false'));
+  $$('section[data-panel]').forEach(s =>
+    s.classList.toggle('hide', s.dataset.panel !== name));
+  if (name === 'screen') renderScreen();
+  if (name === 'narr') renderNarr();
+  if (name === 'valid' && !ST.vRes) renderValid();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function wireJumps() {
+  $$('[data-jump]').forEach(b => b.onclick = () => {
+    ST.ticker = b.dataset.jump;
+    $('#tkSel').value = ST.ticker;
+    renderIntel();
+  });
+}
+function fillTickers() {
+  const cov = new Set(coveredTickers());
+  const opt = u => `<option value="${u.t}">${u.t} — ${u.n}${cov.has(u.t) ? ' ✦' : ''}</option>`;
+  const covered = UNIV.filter(u => cov.has(u.t));
+  const rest = UNIV.filter(u => !cov.has(u.t));
+  const html = `<optgroup label="Couvertes par la fenêtre">${covered.map(opt).join('')}</optgroup>`
+    + `<optgroup label="Reste de l'indice (${rest.length})">${rest.map(opt).join('')}</optgroup>`;
+  $('#tkSel').innerHTML = html;
+  $('#vTk').innerHTML = `<optgroup label="Couvertes">${covered.map(opt).join('')}</optgroup>`;
+  $('#tkSel').value = ST.ticker;
+  $('#vTk').value = covered.some(u => u.t === ST.ticker) ? ST.ticker
+    : (covered[0] ? covered[0].t : ST.ticker);
+}
+
+/* If the chart library cannot be reached (offline, restricted network), say so
+   rather than leaving silent empty boxes. */
+function plotlyGuard() {
+  if (typeof Plotly !== 'undefined') return true;
+  window.Plotly = { react: () => Promise.resolve(), purge: () => {}, Plots: { resize: () => {} } };
+  const b = document.createElement('div');
+  b.className = 'warnnote';
+  b.style.margin = '16px 0';
+  b.textContent = 'La bibliothèque de graphiques n\'a pas pu être chargée (réseau restreint ou '
+    + 'hors ligne). Les chiffres, tableaux et analyses restent complets ; seuls les graphiques '
+    + 'manquent. Rechargez la page depuis une connexion ouverte pour les afficher.';
+  const w = document.querySelector('.wrap');
+  if (w) w.insertBefore(b, w.firstChild);
+  return false;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  plotlyGuard();
+  let th = 'dark';
+  try { th = localStorage.getItem('ap-theme') || 'dark'; } catch (e) {}
+  document.documentElement.setAttribute('data-theme', th);
+  ST.theme = th;
+  $('#btnTheme').textContent = th === 'dark' ? '🌙 Sombre' : '☀️ Clair';
+
+  fillTickers();
+  renderIntel();
+
+  $('#btnTheme').onclick = () => setTheme(ST.theme === 'dark' ? 'light' : 'dark');
+  $('#btnLive').onclick = () => $('#liveBox').classList.toggle('hide');
+  $$('nav.tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+  $('#tkSel').onchange = e => { ST.ticker = e.target.value; renderIntel(); };
+  $('#minRel').onchange = e => { ST.minRel = +e.target.value; renderIntel(); };
+  $('#lookback').onchange = e => { ST.lookback = +e.target.value; renderIntel(); };
+  $('#artSort').onchange = e => { ST.artSort = e.target.value; if (CUR) renderArticles(CUR.d); };
+  $('#scrMin').onchange = renderScreen;
+  $$('#scrTabs .chip').forEach(c => c.onclick = () => {
+    ST.scrView = c.dataset.sv;
+    $$('#scrTabs .chip').forEach(x =>
+      x.setAttribute('aria-pressed', x.dataset.sv === ST.scrView ? 'true' : 'false'));
+    ['rank','map','div','tbl'].forEach(v =>
+      $('#sv' + v[0].toUpperCase() + v.slice(1)).classList.toggle('hide', v !== ST.scrView));
+    if (ST.scrView === 'map') Plotly.Plots.resize('chTree');
+    if (ST.scrView === 'div') Plotly.Plots.resize('chDiv');
+  });
+  $('#btnValid').onclick = renderValid;
+  $('#vHor').onchange = e => { ST.vHor = +e.target.value; showNull(); };
+
+  $('#btnConnect').onclick = async () => {
+    const k = $('#avKey').value.trim();
+    if (!k) { $('#liveMsg').innerHTML = '<span class="pill warn">Saisissez une clé.</span>'; return; }
+    ST.key = k; ST.live = true; ST.cache = {};
+    try { localStorage.setItem('ap-key', k); } catch (e) {}
+    const ok = await loadLive(ST.ticker);
+    if (!ok) { ST.live = false; }
+    fillTickers(); renderIntel();
+    if (ST.tab === 'screen') renderScreen();
+  };
+  $('#btnDisconnect').onclick = () => {
+    ST.live = false; ST.key = ''; ST.cache = {};
+    try { localStorage.removeItem('ap-key'); } catch (e) {}
+    $('#avKey').value = '';
+    $('#liveMsg').innerHTML = '<span class="pill neutral">Instantané réel rétabli.</span>';
+    fillTickers(); renderIntel();
+  };
+  try {
+    const saved = localStorage.getItem('ap-key');
+    if (saved) $('#avKey').value = saved;
+  } catch (e) {}
+
+  window.addEventListener('resize', () => {
+    ['chGauge','chOverlay','chDaily','chScatter','chSources','chRadar','chNarr','chTerms',
+     'chRank','chTree','chDiv','chIC','chNull'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.data) { try { Plotly.Plots.resize(id); } catch (e) {} }
+    });
+  });
+});
+</script>
+</body>
+</html>
